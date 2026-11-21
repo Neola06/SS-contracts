@@ -4,6 +4,9 @@
 //! and refunds when invoices are not paid by due date.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 #![allow(clippy::too_many_arguments)]
 
 mod buy_limit;
@@ -529,6 +532,7 @@ impl InvoiceEscrow {
         )?;
         let mut data = storage::get_escrow(&env, key.clone()).ok_or(Error::EscrowNotFound)?;
         data.accepted_tokens = accepted_tokens;
+        data.category = category.unwrap_or(InvoiceCategory::Standard);
         storage::set_escrow(&env, key, &data);
         Ok(())
     }
@@ -2280,7 +2284,7 @@ impl InvoiceEscrow {
         invoice_id: BytesN<32>,
         investor: Address,
         amount: i128,
-        foreign: Option<(Address, i128)>,
+        _foreign: Option<(Address, i128)>,
     ) -> Result<(), Error> {
         investor.require_auth();
         if amount <= 0 {
@@ -2992,6 +2996,11 @@ impl InvoiceEscrow {
     }
 }
 
+// Modules added for batch resolution of #479, #480, #481
+pub mod earnest_deposit;
+pub mod insurance_pool;
+pub mod oracle_adapter;
+
 #[cfg(test)]
 mod benchmarks;
 #[cfg(test)]
@@ -2999,19 +3008,13 @@ mod integration_test;
 #[cfg(test)]
 mod test;
 #[cfg(test)]
+mod test_batch_features;
+#[cfg(test)]
 mod test_buy_limit;
 #[cfg(test)]
 mod test_multi_currency;
 #[cfg(test)]
 mod test_storage_ttl;
-
-// Modules added for batch resolution of #479, #480, #481
-pub mod earnest_deposit;
-pub mod insurance_pool;
-pub mod oracle_adapter;
-
-#[cfg(test)]
-mod test_batch_features;
 
 pub use earnest_deposit::{EarnestDeposit, EarnestDepositConfig, EarnestError, EarnestStatus};
 pub use insurance_pool::{InsuranceConfig, InsurancePool, InsuranceStorageKey};

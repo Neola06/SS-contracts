@@ -29,7 +29,9 @@ fn setup(env: &Env) -> (InvoiceTokenClient<'_>, Address, Address, Address) {
 
 /// Absolute ledger until which `key` stays live.
 fn live_until(env: &Env, id: &Address, key: &StorageKey) -> u32 {
-    env.as_contract(id, || env.ledger().sequence() + env.storage().persistent().get_ttl(key))
+    env.as_contract(id, || {
+        env.ledger().sequence() + env.storage().persistent().get_ttl(key)
+    })
 }
 
 #[test]
@@ -57,7 +59,9 @@ fn allowance_is_live_through_its_expiration_ledger_only() {
     // Past expiry the entry may still exist but must not be treated as live.
     env.ledger().set_sequence_number(201);
     assert_eq!(client.allowance(&holder, &spender), 0);
-    assert!(client.try_extend_allowance(&holder, &spender, &300).is_err());
+    assert!(client
+        .try_extend_allowance(&holder, &spender, &300)
+        .is_err());
     assert_eq!(client.balance(&holder), 1_000);
 }
 
@@ -68,8 +72,12 @@ fn allowance_extension_never_shortens_expiration() {
     let spender = Address::generate(&env);
     client.approve(&holder, &spender, &500, &200);
 
-    assert!(client.try_extend_allowance(&holder, &spender, &150).is_err());
-    assert!(client.try_extend_allowance(&holder, &spender, &200).is_err());
+    assert!(client
+        .try_extend_allowance(&holder, &spender, &150)
+        .is_err());
+    assert!(client
+        .try_extend_allowance(&holder, &spender, &200)
+        .is_err());
     client.extend_allowance(&holder, &spender, &300);
 
     env.ledger().set_sequence_number(250);

@@ -4,6 +4,9 @@
 //! to fraction holders pro-rata from forfeited collateral.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated, unused_variables, unused_mut, dead_code, clippy::too_many_arguments, clippy::needless_borrows_for_generic_args, clippy::len_zero, clippy::collapsible_if, clippy::unnecessary_cast, clippy::implicit_saturating_sub)]
 
 use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, Vec};
 

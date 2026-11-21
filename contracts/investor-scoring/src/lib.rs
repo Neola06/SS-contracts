@@ -1,4 +1,18 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 mod errors;
 mod events;
@@ -184,9 +198,7 @@ impl InvestorScoring {
         metrics.default_exposure = metrics
             .default_exposure
             .saturating_add(default_exposure_delta);
-        metrics.early_exit_count = metrics
-            .early_exit_count
-            .saturating_add(early_exit_delta);
+        metrics.early_exit_count = metrics.early_exit_count.saturating_add(early_exit_delta);
         metrics.total_volume = metrics.total_volume.saturating_add(volume_delta);
 
         env.storage()

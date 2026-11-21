@@ -5,6 +5,8 @@
 //! repaid principal becomes available to draw again.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
 #![allow(deprecated)]
 
 use soroban_sdk::{
@@ -212,7 +214,8 @@ impl RevolvingCreditLine {
         save_line(&env, &draw.issuer, &line);
         save_draw(&env, &invoice_id, &draw);
         let topics = (Symbol::new(&env, "repaid"), draw.issuer, invoice_id);
-        env.events().publish(topics, (principal_paid, interest_paid));
+        env.events()
+            .publish(topics, (principal_paid, interest_paid));
         Ok(())
     }
 

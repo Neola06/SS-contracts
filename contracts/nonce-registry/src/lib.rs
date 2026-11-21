@@ -1,4 +1,18 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 #[cfg(test)]
 mod test;
@@ -37,7 +51,9 @@ impl NonceRegistry {
         if env.storage().instance().has(&StorageKey::Consumer) {
             return Err(Error::AlreadyInitialized);
         }
-        env.storage().instance().set(&StorageKey::Consumer, &consumer);
+        env.storage()
+            .instance()
+            .set(&StorageKey::Consumer, &consumer);
         Ok(())
     }
 

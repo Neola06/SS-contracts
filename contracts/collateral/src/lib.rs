@@ -1,11 +1,25 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 mod errors;
 mod events;
 mod types;
 
-pub use types::{CollateralState, CollateralStatus, Error};
 use types::{CollateralRecord, StorageKey};
+pub use types::{CollateralState, CollateralStatus, Error};
 
 use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env};
 
@@ -70,7 +84,11 @@ impl Collateral {
         }
         issuer.require_auth();
 
-        let token: Address = env.storage().instance().get(&StorageKey::Token).ok_or(Error::NotInitialized)?;
+        let token: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Token)
+            .ok_or(Error::NotInitialized)?;
         let client = token::Client::new(&env, &token);
         if client.balance(&issuer) < amount {
             return Err(Error::InsufficientBalance);
@@ -98,12 +116,13 @@ impl Collateral {
             return Err(Error::NotLocked);
         }
 
-        let token: Address = env.storage().instance().get(&StorageKey::Token).ok_or(Error::NotInitialized)?;
+        let token: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Token)
+            .ok_or(Error::NotInitialized)?;
         let client = token::Client::new(&env, &token);
-        client
-            .transfer(&env.current_contract_address(), &data.issuer, &data.amount)
-            ;
-
+        client.transfer(&env.current_contract_address(), &data.issuer, &data.amount);
 
         data.state = CollateralState::Released;
         save_collateral(&env, &data);
@@ -125,12 +144,13 @@ impl Collateral {
             .instance()
             .get(&StorageKey::CompensationPool)
             .ok_or(Error::NotInitialized)?;
-        let token: Address = env.storage().instance().get(&StorageKey::Token).ok_or(Error::NotInitialized)?;
+        let token: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Token)
+            .ok_or(Error::NotInitialized)?;
         let client = token::Client::new(&env, &token);
-        client
-            .transfer(&env.current_contract_address(), &pool, &data.amount)
-            ;
-
+        client.transfer(&env.current_contract_address(), &pool, &data.amount);
 
         data.state = CollateralState::Forfeited;
         save_collateral(&env, &data);

@@ -1,13 +1,16 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
 mod types;
 
-pub use types::{AmendmentField, AmendmentStatus, Error};
 use types::{Amendment, InvoiceMetadata, StorageKey};
+pub use types::{AmendmentField, AmendmentStatus, Error};
 
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Symbol};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env};
 
 const TIME_LOCK_SECS: u64 = 86_400;
 
@@ -112,7 +115,6 @@ impl InvoiceAmendment {
             .get(&StorageKey::NextAmendmentId)
             .unwrap_or(1);
         let now = env.ledger().timestamp();
-        let field_sym = field.as_symbol(&env);
         let amendment = Amendment {
             amendment_id: id,
             invoice_id: invoice_id.clone(),
@@ -143,7 +145,6 @@ impl InvoiceAmendment {
         }
 
         let mut meta = metadata(&env, &data.invoice_id)?;
-        let field_sym = data.field.as_symbol(&env);
         match data.field {
             AmendmentField::Amount => meta.amount = data.new_value,
             AmendmentField::MaturityDate => {
@@ -160,7 +161,13 @@ impl InvoiceAmendment {
         save_amendment(&env, &data);
 
         let field_sym = data.field.as_symbol(&env);
-        events::amendment_executed(&env, amendment_id, &data.invoice_id, &field_sym, data.new_value);
+        events::amendment_executed(
+            &env,
+            amendment_id,
+            &data.invoice_id,
+            &field_sym,
+            data.new_value,
+        );
         Ok(meta)
     }
 
@@ -180,7 +187,10 @@ impl InvoiceAmendment {
         amendment(&env, amendment_id)
     }
 
-    pub fn get_invoice_metadata(env: Env, invoice_id: BytesN<32>) -> Result<InvoiceMetadata, Error> {
+    pub fn get_invoice_metadata(
+        env: Env,
+        invoice_id: BytesN<32>,
+    ) -> Result<InvoiceMetadata, Error> {
         metadata(&env, &invoice_id)
     }
 }

@@ -5,6 +5,9 @@
 //! Tier determines maximum invoice size and yield rate floor.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -34,11 +37,11 @@ fn tier_from_score(score: u32) -> CreditTier {
 }
 
 fn compute_score_internal(factors: &IssuerFactors) -> u32 {
-    let kyc_pts = (factors.kyc_tier.min(3) as u32) * 20;
+    let kyc_pts = factors.kyc_tier.min(3) * 20;
 
-    let settlement_pts = (factors.settlement_history.min(10) as u32) * 5;
+    let settlement_pts = factors.settlement_history.min(10) * 5;
 
-    let default_penalty = (factors.default_count as u32) * 25;
+    let default_penalty = factors.default_count * 25;
 
     let tenure_pts = (factors.platform_tenure_days / 10).min(30);
 
@@ -84,11 +87,7 @@ impl CreditScoring {
 
     /// Admin-only: register a contract address as authorised to call
     /// `compute_credit_score`.
-    pub fn set_authorised_caller(
-        env: Env,
-        caller: Address,
-        authorised: bool,
-    ) -> Result<(), Error> {
+    pub fn set_authorised_caller(env: Env, caller: Address, authorised: bool) -> Result<(), Error> {
         let admin: Address = env
             .storage()
             .instance()

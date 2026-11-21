@@ -4,6 +4,9 @@
 //! purchases to reduce wash trading and artificial price inflation.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -56,11 +59,7 @@ impl SecondaryCooldown {
 
     /// Record a successful secondary market buy. Returns CooldownActive if
     /// within the cooldown window.
-    pub fn record_buy(
-        env: Env,
-        buyer: Address,
-        invoice_id: BytesN<32>,
-    ) -> Result<(), Error> {
+    pub fn record_buy(env: Env, buyer: Address, invoice_id: BytesN<32>) -> Result<(), Error> {
         buyer.require_auth();
 
         let now = env.ledger().timestamp();
@@ -88,9 +87,10 @@ impl SecondaryCooldown {
         }
 
         // Record timestamp for this wallet/invoice pair.
-        env.storage()
-            .persistent()
-            .set(&StorageKey::LastBuy(buyer.clone(), invoice_id.clone()), &now);
+        env.storage().persistent().set(
+            &StorageKey::LastBuy(buyer.clone(), invoice_id.clone()),
+            &now,
+        );
 
         events::buy_recorded(&env, &buyer, &invoice_id, now);
         Ok(())
@@ -124,10 +124,6 @@ impl SecondaryCooldown {
         }
 
         let elapsed = now.saturating_sub(last_buy);
-        if elapsed >= period {
-            0
-        } else {
-            period - elapsed
-        }
+        period.saturating_sub(elapsed)
     }
 }

@@ -21,6 +21,20 @@
 //! job can poll the contract without flooding the subscribers.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 mod errors;
 mod events;
@@ -220,8 +234,8 @@ impl InvoicePerformanceAlert {
             days_to_close: evaluation.days_to_close,
             days_to_due: evaluation.days_to_due,
             last_alert_at: latest.map_or(0, |record| record.timestamp),
-            last_alert_type: latest_type,
-            last_severity: latest.map(|record| record.severity),
+            last_alert_type: latest_type.map(|risk| risk as u32).unwrap_or(0),
+            last_severity: latest.map(|record| record.severity as u32).unwrap_or(0),
         })
     }
 

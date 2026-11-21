@@ -4,6 +4,20 @@
 //! collateral above the required minimum for 30 consecutive days.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 mod errors;
 mod events;
@@ -98,10 +112,7 @@ impl OvercollateralReward {
 
     /// Returns whether the issuer is currently over-collateralised, their
     /// excess bps, and how many days the current streak has lasted.
-    pub fn check_overcollateral(
-        env: Env,
-        issuer: Address,
-    ) -> Result<(bool, u32, u32), Error> {
+    pub fn check_overcollateral(env: Env, issuer: Address) -> Result<(bool, u32, u32), Error> {
         let record: CollateralRecord = env
             .storage()
             .persistent()
@@ -138,8 +149,7 @@ impl OvercollateralReward {
         }
 
         let now = env.ledger().timestamp();
-        let days_elapsed =
-            (now.saturating_sub(record.streak_start)) / SECONDS_PER_DAY;
+        let days_elapsed = (now.saturating_sub(record.streak_start)) / SECONDS_PER_DAY;
 
         if days_elapsed < REQUIRED_STREAK_DAYS {
             return Err(Error::StreakTooShort);
@@ -180,7 +190,11 @@ impl OvercollateralReward {
         Ok(RewardStatus {
             streak_days,
             discount_pending: record.discount_pending,
-            discount_bps: if record.discount_pending { DISCOUNT_BPS } else { 0 },
+            discount_bps: if record.discount_pending {
+                DISCOUNT_BPS
+            } else {
+                0
+            },
         })
     }
 

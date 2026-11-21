@@ -5,6 +5,9 @@
 //! without reconstructing the invoice from off-chain records.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;

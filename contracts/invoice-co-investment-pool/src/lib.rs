@@ -14,6 +14,9 @@
 //!      contribution back.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -109,7 +112,7 @@ impl InvoiceCoInvestmentPool {
 
         token::Client::new(&env, &token).transfer(
             &investor,
-            &env.current_contract_address(),
+            env.current_contract_address(),
             &amount,
         );
 

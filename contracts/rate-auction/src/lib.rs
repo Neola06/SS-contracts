@@ -22,6 +22,10 @@
 //! - `get_commitments(invoice_id)` — view: commitment list
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -202,9 +206,7 @@ impl RateAuction {
 
         // Reject new commitments once the max rate has been reached and the
         // auction is still unfilled — the caller must use `close_expired`.
-        if rate >= auction.max_rate_bps
-            && auction.total_committed < auction.face_value
-        {
+        if rate >= auction.max_rate_bps && auction.total_committed < auction.face_value {
             // Only reject if truly unfilled; a filled auction would have been
             // closed already in a prior call.
             return Err(Error::AuctionExpired);
@@ -222,11 +224,7 @@ impl RateAuction {
 
         // Pull tokens from the investor.
         let token_client = token::Client::new(&env, &auction.token);
-        token_client.transfer(
-            &investor,
-            &env.current_contract_address(),
-            &actual_amount,
-        );
+        token_client.transfer(&investor, env.current_contract_address(), &actual_amount);
 
         // Record the commitment.
         let mut commitments = storage::get_commitments(&env, &invoice_id);

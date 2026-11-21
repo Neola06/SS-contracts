@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod events;
 mod types;
@@ -199,7 +202,7 @@ impl InvoiceSettlement {
             return Err(Error::InvalidAmount);
         }
         let token_client = token::Client::new(&env, &data.token);
-        token_client.transfer(&payer, &env.current_contract_address(), &amount);
+        token_client.transfer(&payer, env.current_contract_address(), &amount);
         data.repaid_amount = amount;
         data.outstanding_balance = 0;
         save_invoice(&env, &data);

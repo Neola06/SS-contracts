@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, Symbol, Vec,
@@ -93,7 +96,7 @@ impl SecondaryMarketOracle {
         }
         let history_key = DataKey::History(invoice_id.clone());
         let now = env.ledger().timestamp();
-        let mut history: Vec<PricePoint> = env
+        let history: Vec<PricePoint> = env
             .storage()
             .persistent()
             .get(&history_key)

@@ -4,8 +4,10 @@ use soroban_sdk::{Address, BytesN, Env, Symbol, Vec};
 
 use crate::types::{
     CategoryFeeSchedule, Config, DisputeData, EmergencyApprovals, EscrowData, InstallmentMilestone,
-    InvestmentRecord, InvoiceCategory, InvoiceData, MultiSigConfig, SettlementProposal, StorageKey,
+    InvestmentRecord, InvoiceCategory, InvoiceData, MultiSigConfig, SettlementProposal,
 };
+
+pub use crate::types::StorageKey;
 
 /// Ledgers below which a persistent entry's TTL is extended (~7 days at 5s/ledger).
 pub const TTL_THRESHOLD: u32 = 120_960;

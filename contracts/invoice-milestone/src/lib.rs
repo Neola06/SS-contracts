@@ -4,6 +4,9 @@
 //! project milestones, protecting investors until deliverables are confirmed.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;

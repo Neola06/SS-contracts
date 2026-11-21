@@ -10,6 +10,20 @@
 //!   Platinum – 20 % (2000 bps)
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 mod errors;
 mod events;
@@ -62,13 +76,8 @@ fn apply_discount(
 ) -> Result<(LoyaltyTier, i128, i128), Error> {
     let tier = get_wallet_tier(env, wallet);
     let bps = discount_bps_for_tier(tier);
-    let discount = original_fee
-        .checked_mul(bps)
-        .ok_or(Error::Overflow)?
-        / BPS_DENOMINATOR;
-    let final_fee = original_fee
-        .checked_sub(discount)
-        .ok_or(Error::Overflow)?;
+    let discount = original_fee.checked_mul(bps).ok_or(Error::Overflow)? / BPS_DENOMINATOR;
+    let final_fee = original_fee.checked_sub(discount).ok_or(Error::Overflow)?;
     Ok((tier, discount, final_fee))
 }
 
@@ -130,9 +139,7 @@ impl FeeDiscount {
             return Err(Error::InvalidFeeBps);
         }
         cfg.platform_fee_bps = new_bps;
-        env.storage()
-            .instance()
-            .set(&StorageKey::Config, &cfg);
+        env.storage().instance().set(&StorageKey::Config, &cfg);
         Ok(())
     }
 

@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -27,15 +30,10 @@ impl AccreditationRenewalContract {
 
     pub fn set_accreditation_expiry(
         env: Env,
+        caller: Address,
         wallet: Address,
         expiry_timestamp: u64,
     ) -> Result<(), Error> {
-        let is_admin = env
-            .storage()
-            .instance()
-            .get::<DataKey, Address>(&DataKey::Admin)
-            .map(|a| a == wallet)
-            .unwrap_or(false);
         let admin_addr: Address = env
             .storage()
             .instance()
@@ -46,12 +44,9 @@ impl AccreditationRenewalContract {
             .instance()
             .get(&DataKey::Operator)
             .ok_or(Error::NotInitialized)?;
-
-        if !is_admin {
-            // Require auth from either admin or operator
-            if admin_addr.require_auth().is_err() && operator_addr.require_auth().is_err() {
-                return Err(Error::Unauthorized);
-            }
+        caller.require_auth();
+        if caller != admin_addr && caller != operator_addr {
+            return Err(Error::Unauthorized);
         }
 
         if expiry_timestamp <= env.ledger().timestamp() {
@@ -102,7 +97,9 @@ impl AccreditationRenewalContract {
 
         for wallet in list.iter() {
             let expiry_key = DataKey::Expiry(wallet.clone());
-            if let Some(expiry_timestamp) = env.storage().persistent().get::<DataKey, u64>(&expiry_key) {
+            if let Some(expiry_timestamp) =
+                env.storage().persistent().get::<DataKey, u64>(&expiry_key)
+            {
                 if expiry_timestamp > now {
                     let days_remaining = (expiry_timestamp - now) / SECONDS_PER_DAY;
                     let log_key = DataKey::ReminderLog(wallet.clone());

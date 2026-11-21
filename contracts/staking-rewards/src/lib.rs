@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, token, Address, BytesN, Env, Symbol,
@@ -91,7 +94,7 @@ impl StakingRewards {
         }
         token::Client::new(&env, &invoice.token).transfer(
             &invoice.issuer,
-            &env.current_contract_address(),
+            env.current_contract_address(),
             &amount,
         );
         let pool: i128 = env
@@ -126,7 +129,7 @@ impl StakingRewards {
         }
         token::Client::new(&env, &invoice.token).transfer(
             &wallet,
-            &env.current_contract_address(),
+            env.current_contract_address(),
             &amount,
         );
         let id: u64 = env
@@ -172,7 +175,7 @@ impl StakingRewards {
             .amount
             .checked_mul(invoice.bonus_bps as i128)
             .ok_or(Error::Overflow)?
-            .checked_mul(stake.unlock_at - stake.started_at)
+            .checked_mul((stake.unlock_at - stake.started_at) as i128)
             .ok_or(Error::Overflow)?
             .checked_div(10_000 * YEAR as i128)
             .ok_or(Error::Overflow)?;

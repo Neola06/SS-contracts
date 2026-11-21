@@ -101,7 +101,8 @@ fn create_and_fund(ctx: &TestContext<'_>, amount: i128, due_date: u64) {
         &None,
         &None,
     );
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &amount);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &amount);
 }
 
 #[test]
@@ -175,7 +176,7 @@ proptest! {
     }
 
     /// Issue #484: Proptest fuzzing for fee calculation monotonicity.
-    /// 
+    ///
     /// Monotonicity property: for any fixed payment amount, if fee_bps increases,
     /// the calculated platform fee must also increase (or remain equal for edge cases).
     /// This ensures fee calculations behave predictably across all basis point permutations.
@@ -187,28 +188,28 @@ proptest! {
     ) {
         let already_distributed = 0i128;
         let investor_amount = payment_amount / 2; // arbitrary fixed investor share
-        
+
         let result_1 = compute_split(
             payment_amount,
             already_distributed,
             investor_amount,
             fee_bps_1,
         );
-        
+
         let result_2 = compute_split(
             payment_amount,
             already_distributed,
             investor_amount,
             fee_bps_2,
         );
-        
+
         // Both computations should succeed for valid inputs
         prop_assert!(result_1.is_ok(), "compute_split failed for fee_bps_1={}", fee_bps_1);
         prop_assert!(result_2.is_ok(), "compute_split failed for fee_bps_2={}", fee_bps_2);
-        
+
         let preview_1 = result_1.unwrap();
         let preview_2 = result_2.unwrap();
-        
+
         // Monotonicity: if fee_bps_2 >= fee_bps_1, then platform_fee_2 >= platform_fee_1
         if fee_bps_2 >= fee_bps_1 {
             prop_assert!(
@@ -217,7 +218,7 @@ proptest! {
                 fee_bps_1, preview_1.platform_fee, fee_bps_2, preview_2.platform_fee
             );
         }
-        
+
         // Symmetric check
         if fee_bps_1 >= fee_bps_2 {
             prop_assert!(
@@ -226,7 +227,7 @@ proptest! {
                 fee_bps_2, preview_2.platform_fee, fee_bps_1, preview_1.platform_fee
             );
         }
-        
+
         // Equality case: same fee_bps should produce same platform fee
         if fee_bps_1 == fee_bps_2 {
             prop_assert_eq!(
@@ -235,7 +236,7 @@ proptest! {
                 "Equal fee_bps should produce equal platform fees"
             );
         }
-        
+
         // Boundary verification: 0 bps should always yield 0 fee
         if fee_bps_1 == 0 {
             prop_assert_eq!(preview_1.platform_fee, 0, "Zero fee_bps should yield zero fee");
@@ -243,7 +244,7 @@ proptest! {
         if fee_bps_2 == 0 {
             prop_assert_eq!(preview_2.platform_fee, 0, "Zero fee_bps should yield zero fee");
         }
-        
+
         // Upper bound check: fee should never exceed payment amount
         prop_assert!(
             preview_1.platform_fee <= payment_amount,
@@ -258,9 +259,9 @@ proptest! {
             payment_amount
         );
     }
-    
+
     /// Issue #484: Additional monotonicity test with incremental fee basis point steps.
-    /// 
+    ///
     /// Tests that for any payment, fees increase monotonically as basis points
     /// increase in small increments (1 bps steps).
     #[test]
@@ -270,9 +271,9 @@ proptest! {
     ) {
         let already_distributed = 0i128;
         let investor_amount = payment_amount / 3;
-        
+
         let end_bps = (start_bps + 100).min(10_000);
-        
+
         let mut prev_fee = None;
         for fee_bps in start_bps..=end_bps {
             let result = compute_split(
@@ -281,10 +282,10 @@ proptest! {
                 investor_amount,
                 fee_bps,
             );
-            
+
             prop_assert!(result.is_ok(), "compute_split failed for fee_bps={}", fee_bps);
             let preview = result.unwrap();
-            
+
             if let Some(prev) = prev_fee {
                 prop_assert!(
                     preview.platform_fee >= prev,
@@ -292,13 +293,13 @@ proptest! {
                     fee_bps, preview.platform_fee, prev
                 );
             }
-            
+
             prev_fee = Some(preview.platform_fee);
         }
     }
-    
+
     /// Issue #484: Monotonicity with partial distributions.
-    /// 
+    ///
     /// Verifies that monotonicity holds even when some payment has already
     /// been distributed (common in incremental payment scenarios).
     #[test]
@@ -310,23 +311,23 @@ proptest! {
     ) {
         let already_distributed = total_payment * already_distributed_fraction as i128 / 100;
         let remaining = total_payment - already_distributed;
-        
+
         if remaining <= 0 {
             return Ok(());
         }
-        
+
         let investor_amount = remaining / 4;
-        
+
         let result_1 = compute_split(total_payment, already_distributed, investor_amount, fee_bps_1);
         let result_2 = compute_split(total_payment, already_distributed, investor_amount, fee_bps_2);
-        
+
         if result_1.is_err() || result_2.is_err() {
             return Ok(());
         }
-        
+
         let preview_1 = result_1.unwrap();
         let preview_2 = result_2.unwrap();
-        
+
         if fee_bps_2 > fee_bps_1 {
             prop_assert!(
                 preview_2.platform_fee >= preview_1.platform_fee,
@@ -5520,8 +5521,6 @@ fn issue456_migrated_recipient_accumulates_fees_across_invoices() {
     assert_eq!(ctx.payment_token.balance(&ctx.distributor_id), 0);
 }
 
-
-
 // ══════════════════════════════════════════════════════════════════════════════
 // Issue #472: Snapshot validation test suite for all payment-distributor events
 // ══════════════════════════════════════════════════════════════════════════════
@@ -5530,13 +5529,13 @@ fn issue456_migrated_recipient_accumulates_fees_across_invoices() {
 fn test_event_initialized_emitted() {
     let env = Env::default();
     env.mock_all_auths();
-    
+
     let admin = Address::generate(&env);
     let distributor_id = env.register(PaymentDistributor, ());
     let distributor = PaymentDistributorClient::new(&env, &distributor_id);
-    
+
     distributor.initialize(&admin);
-    
+
     let events = env.events().all();
     assert!(events.events().len() > 0);
 }
@@ -5546,12 +5545,12 @@ fn test_event_initialized_emitted() {
 // fn test_event_payment_distributed_emitted() {
 //     let env = Env::default();
 //     env.mock_all_auths();
-//     
+//
 //     let ctx = setup(&env, 500, true);
 //     create_and_fund(&ctx, 1_000, 50_000);
 //     ctx.payment_asset.mint(&ctx.payer, &1_000);
 //     ctx.escrow.record_payment(&ctx.invoice_id, &ctx.payer, &1_000);
-//     
+//
 //     let events = env.events().all();
 //     assert!(events.events().len() > 0);
 // }
@@ -5560,11 +5559,12 @@ fn test_event_initialized_emitted() {
 fn test_event_fee_recipient_updated_emitted() {
     let env = Env::default();
     env.mock_all_auths();
-    
+
     let ctx = setup(&env, 500, true);
     let new_recipient = Address::generate(&env);
-    ctx.distributor.set_fee_recipient(&ctx.admin, &new_recipient);
-    
+    ctx.distributor
+        .set_fee_recipient(&ctx.admin, &new_recipient);
+
     let events = env.events().all();
     assert!(events.events().len() > 0);
 }
@@ -5573,11 +5573,12 @@ fn test_event_fee_recipient_updated_emitted() {
 fn test_event_escrow_contract_updated_emitted() {
     let env = Env::default();
     env.mock_all_auths();
-    
+
     let ctx = setup(&env, 500, false);
     let escrow_address = Address::generate(&env);
-    ctx.distributor.set_escrow_contract(&ctx.admin, &escrow_address);
-    
+    ctx.distributor
+        .set_escrow_contract(&ctx.admin, &escrow_address);
+
     let events = env.events().all();
     assert!(events.events().len() > 0);
 }
@@ -5586,10 +5587,10 @@ fn test_event_escrow_contract_updated_emitted() {
 fn test_event_investor_bonus_rate_updated_emitted() {
     let env = Env::default();
     env.mock_all_auths();
-    
+
     let ctx = setup(&env, 500, true);
     ctx.distributor.set_investor_bonus_bps(&ctx.admin, &200);
-    
+
     let events = env.events().all();
     assert!(events.events().len() > 0);
 }
@@ -5598,16 +5599,17 @@ fn test_event_investor_bonus_rate_updated_emitted() {
 fn test_event_emergency_withdrawal_emitted() {
     let env = Env::default();
     env.mock_all_auths();
-    
+
     let ctx = setup(&env, 500, true);
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
     let asset = AssetClient::new(&env, &token_id.address());
-    
+
     asset.mint(&ctx.distributor_id, &5_000);
     let withdrawal_target = Address::generate(&env);
-    ctx.distributor.emergency_withdraw(&ctx.admin, &token_id.address(), &withdrawal_target);
-    
+    ctx.distributor
+        .emergency_withdraw(&ctx.admin, &token_id.address(), &withdrawal_target);
+
     let events = env.events().all();
     assert!(events.events().len() > 0);
 }
@@ -5616,15 +5618,15 @@ fn test_event_emergency_withdrawal_emitted() {
 fn test_event_dust_swept_emitted() {
     let env = Env::default();
     env.mock_all_auths();
-    
+
     let ctx = setup(&env, 500, true);
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
     let asset = AssetClient::new(&env, &token_id.address());
-    
+
     asset.mint(&ctx.distributor_id, &3);
     ctx.distributor.sweep_dust(&ctx.admin, &token_id.address());
-    
+
     let events = env.events().all();
     assert!(events.events().len() > 0);
 }
@@ -5633,15 +5635,17 @@ fn test_event_dust_swept_emitted() {
 fn test_event_excess_refunded_emitted() {
     let env = Env::default();
     env.mock_all_auths();
-    
+
     let ctx = setup(&env, 500, true);
     let escrow_id = ctx.escrow_id.clone();
     let invoice_id = Symbol::new(&env, "EXCESS");
-    
+
     ctx.payment_asset.mint(&escrow_id, &1_000);
-    ctx.payment_token.transfer(&escrow_id, &ctx.distributor_id, &1_000);
-    ctx.distributor.refund_excess(&escrow_id, &ctx.payment_token.address, &invoice_id);
-    
+    ctx.payment_token
+        .transfer(&escrow_id, &ctx.distributor_id, &1_000);
+    ctx.distributor
+        .refund_excess(&escrow_id, &ctx.payment_token.address, &invoice_id);
+
     let events = env.events().all();
     assert!(events.events().len() > 0);
 }
@@ -5651,14 +5655,14 @@ fn test_event_excess_refunded_emitted() {
 // fn test_event_payment_distributed_includes_timestamp() {
 //     let env = Env::default();
 //     env.mock_all_auths();
-//     
+//
 //     let ctx = setup(&env, 500, true);
 //     create_and_fund(&ctx, 1_000, 50_000);
 //     ctx.payment_asset.mint(&ctx.payer, &1_000);
-//     
+//
 //     env.ledger().with_mut(|li| li.timestamp = 123_456_789);
 //     ctx.escrow.record_payment(&ctx.invoice_id, &ctx.payer, &1_000);
-//     
+//
 //     let events = env.events().all();
 //     assert!(events.events().len() > 0);
 // }
@@ -5669,27 +5673,27 @@ fn test_event_excess_refunded_emitted() {
 //     // This test ensures all 11 payment-distributor events are covered
 //     let env = Env::default();
 //     env.mock_all_auths();
-//     
+//
 //     let ctx = setup(&env, 500, true);
-//     
+//
 //     // 1. initialized (from setup)
 //     // 2. escrow_contract_updated (from setup)
 //     // 3. fee_recipient_updated
 //     let new_recipient = Address::generate(&env);
 //     ctx.distributor.set_fee_recipient(&ctx.admin, &new_recipient);
-//     
+//
 //     // 4. PaymentDistributed
 //     create_and_fund(&ctx, 1_000, 50_000);
 //     ctx.payment_asset.mint(&ctx.payer, &1_000);
 //     ctx.escrow.record_payment(&ctx.invoice_id, &ctx.payer, &1_000);
-//     
+//
 //     // 5. investor_bonus_rate_updated
 //     ctx.distributor.set_investor_bonus_bps(&ctx.admin, &100);
-//     
+//
 //     // 6-11: refund_distributed, referral_paid, AssetDistributed,
 //     // EmergencyWithdrawal, DustSwept, ExcessRefunded, role_grant_updated
 //     // are tested individually above and in integration tests
-//     
+//
 //     let events = env.events().all();
 //     assert!(events.events().len() >= 5);
 // }

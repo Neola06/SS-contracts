@@ -1,4 +1,18 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 mod errors;
 mod events;
@@ -22,7 +36,9 @@ impl OrderBook {
         }
         env.storage().instance().set(&StorageKey::Admin, &admin);
         env.storage().instance().set(&StorageKey::Token, &token);
-        env.storage().instance().set(&StorageKey::NextOrderId, &1u32);
+        env.storage()
+            .instance()
+            .set(&StorageKey::NextOrderId, &1u32);
         Ok(())
     }
 

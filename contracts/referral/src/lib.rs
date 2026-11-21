@@ -1,12 +1,14 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Symbol};
 
 /// Issue #585: Referral reward contract for investor acquisition incentives
-/// 
+///
 /// Rewards investors for bringing new wallets to the platform, distributing
 /// 20% of the platform fee on the referred wallet's first investment.
-
 const REFERRAL_REWARD_BPS: i128 = 2000; // 20% in basis points
 const BPS_DENOMINATOR: i128 = 10000;
 
@@ -19,9 +21,9 @@ pub struct ReferralStats {
 
 #[contracttype]
 pub enum DataKey {
-    Referrer(Address), // wallet -> referrer address
+    Referrer(Address),        // wallet -> referrer address
     FirstInvestment(Address), // wallet -> bool (has made first investment)
-    Stats(Address), // referrer -> ReferralStats
+    Stats(Address),           // referrer -> ReferralStats
 }
 
 #[contract]
@@ -39,7 +41,11 @@ impl ReferralContract {
         }
 
         // Only register if wallet hasn't been referred yet
-        if env.storage().persistent().has(&DataKey::Referrer(wallet.clone())) {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Referrer(wallet.clone()))
+        {
             panic!("Wallet already referred");
         }
 
@@ -66,11 +72,7 @@ impl ReferralContract {
     }
 
     /// Process first investment and pay referral reward
-    pub fn on_first_investment(
-        env: Env,
-        wallet: Address,
-        fee_amount: i128,
-    ) -> Option<i128> {
+    pub fn on_first_investment(env: Env, wallet: Address, fee_amount: i128) -> Option<i128> {
         // Check if this is the first investment
         let is_first: bool = env
             .storage()
@@ -107,7 +109,10 @@ impl ReferralContract {
 
             // Emit ReferralRewardPaid event
             env.events().publish(
-                (Symbol::new(&env, "ReferralRewardPaid"), referrer_address.clone()),
+                (
+                    Symbol::new(&env, "ReferralRewardPaid"),
+                    referrer_address.clone(),
+                ),
                 (wallet, reward),
             );
 

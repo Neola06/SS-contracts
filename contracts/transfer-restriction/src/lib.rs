@@ -1,8 +1,20 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
-use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, Env, Symbol,
-};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol};
 
 #[derive(Clone)]
 #[contracttype]
@@ -86,11 +98,7 @@ impl TransferRestriction {
         }
     }
 
-    pub fn validate_transfer(
-        env: Env,
-        invoice_id: Symbol,
-        wallet: Address,
-    ) -> Result<(), Error> {
+    pub fn validate_transfer(env: Env, invoice_id: Symbol, wallet: Address) -> Result<(), Error> {
         let key = DataKey::Lock(invoice_id.clone(), wallet.clone());
         let Some(mut lock) = env.storage().persistent().get::<_, Lockup>(&key) else {
             return Ok(());

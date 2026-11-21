@@ -36,7 +36,7 @@ warn()    { echo -e "${YELLOW}[cli]${NC}  $*"; }
 die()     { echo -e "${RED}[cli]${NC}  $*" >&2; exit 1; }
 
 ENV_FILE="${REPO_ROOT}/.env"
-ENV_EXAMPLE="${REPO_ROOT}/.env.example"
+export ENV_EXAMPLE="${REPO_ROOT}/.env.example"
 
 load_env() {
   if [[ -f "${ENV_FILE}" ]]; then

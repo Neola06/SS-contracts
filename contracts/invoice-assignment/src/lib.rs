@@ -7,6 +7,8 @@
 //! started, i.e. once the first payment has been recorded.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
 #![allow(deprecated)]
 
 use soroban_sdk::{

@@ -8,6 +8,9 @@
 //! Each benchmark runs the operation inside a measured closure and reports
 //! the CPU instructions consumed and memory bytes allocated.
 
+extern crate std;
+use std::println;
+
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{Address, BytesN, Env, Symbol};
 

@@ -8,7 +8,7 @@
 
 use super::*;
 use invoice_token::{InvoiceToken, InvoiceTokenClient};
-use referral::{Referral, ReferralClient};
+use referral::{ReferralContract, ReferralContractClient};
 use soroban_sdk::token::{Client as TokenClient, StellarAssetClient as AssetClient};
 use soroban_sdk::{
     testutils::{Address as _, Events as _, Ledger as _},
@@ -118,7 +118,8 @@ fn create_and_fund(ctx: &Ctx<'_>, amount: i128, due_date: u64) {
         &None,
         &None,
     );
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &amount);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &amount);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -502,7 +503,8 @@ fn test_integration_pause_blocks_fund_and_payment() {
 
     // Unpause and fund.
     ctx.escrow.set_paused(&false);
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &1_000);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &1_000);
 
     // Re-pause and try to record payment.
     ctx.escrow.set_paused(&true);
@@ -675,15 +677,21 @@ fn test_integration_competing_funders_cannot_overfund_invoice() {
         &None,
     );
 
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &1_000);
-    let losing_funder = ctx.escrow.try_fund_escrow_legacy(&ctx.invoice_id, &competitor, &1_000);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &1_000);
+    let losing_funder = ctx
+        .escrow
+        .try_fund_escrow_legacy(&ctx.invoice_id, &competitor, &1_000);
 
     assert!(losing_funder.is_err());
     assert_eq!(ctx.payment_token.balance(&ctx.escrow_id), 1_000);
     assert_eq!(ctx.payment_token.balance(&competitor), 1_000);
     assert_eq!(ctx.inv_token.balance(&ctx.buyer), 1_000);
     assert_eq!(ctx.inv_token.balance(&competitor), 0);
-    assert_eq!(ctx.escrow.get_escrow_status(&ctx.invoice_id), EscrowStatus::Funded);
+    assert_eq!(
+        ctx.escrow.get_escrow_status(&ctx.invoice_id),
+        EscrowStatus::Funded
+    );
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -975,7 +983,8 @@ fn test_integration_commitment_immutable_after_lifecycle() {
     );
 
     // Fund.
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &1_000);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &1_000);
     assert_eq!(ctx.escrow.get_escrow(&ctx.invoice_id).commitment, original);
 
     // Settle.
@@ -1264,7 +1273,8 @@ fn test_integration_discounted_purchase_price() {
         &None,
         &None,
     );
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &900);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &900);
 
     assert_eq!(ctx.payment_token.balance(&ctx.buyer), 0);
     assert_eq!(ctx.payment_token.balance(&ctx.escrow_id), 900);
@@ -1469,7 +1479,10 @@ fn test_integration_circuit_breaker_pause_and_recovery_drill() {
         .escrow
         .try_record_payment(&ctx.invoice_id, &ctx.payer, &1_000);
     assert_eq!(blocked_payment, Err(Ok(errors::Error::Paused)));
-    assert_eq!(ctx.escrow.get_escrow_status(&ctx.invoice_id), EscrowStatus::Funded);
+    assert_eq!(
+        ctx.escrow.get_escrow_status(&ctx.invoice_id),
+        EscrowStatus::Funded
+    );
     assert_eq!(ctx.payment_token.balance(&ctx.escrow_id), 1_000);
     assert_eq!(ctx.payment_token.balance(&ctx.seller), 0);
 
@@ -1479,8 +1492,12 @@ fn test_integration_circuit_breaker_pause_and_recovery_drill() {
     ctx.inv_token.set_paused(&false);
     assert!(!ctx.inv_token.paused());
 
-    ctx.escrow.record_payment(&ctx.invoice_id, &ctx.payer, &1_000);
-    assert_eq!(ctx.escrow.get_escrow_status(&ctx.invoice_id), EscrowStatus::Settled);
+    ctx.escrow
+        .record_payment(&ctx.invoice_id, &ctx.payer, &1_000);
+    assert_eq!(
+        ctx.escrow.get_escrow_status(&ctx.invoice_id),
+        EscrowStatus::Settled
+    );
     assert_eq!(ctx.payment_token.balance(&ctx.escrow_id), 0);
     assert_eq!(ctx.payment_token.balance(&ctx.seller), 1_000);
     assert_eq!(ctx.payment_token.balance(&ctx.buyer), 970);
@@ -1503,24 +1520,30 @@ fn test_integration_dispute_timeout_refunds_buyer_and_recovers_token() {
         &ctx.invoice_id,
         &soroban_sdk::Bytes::from_slice(&env, b"delivery not received"),
     );
-    assert_eq!(ctx.escrow.get_escrow_status(&ctx.invoice_id), EscrowStatus::Disputed);
+    assert_eq!(
+        ctx.escrow.get_escrow_status(&ctx.invoice_id),
+        EscrowStatus::Disputed
+    );
     assert!(ctx.inv_token.transfer_locked());
 
     let blocked_payment = ctx
         .escrow
         .try_record_payment(&ctx.invoice_id, &ctx.payer, &1_000);
-    assert_eq!(blocked_payment, Err(Ok(errors::Error::InvalidInvoiceStatus)));
+    assert_eq!(
+        blocked_payment,
+        Err(Ok(errors::Error::InvalidInvoiceStatus))
+    );
     assert_eq!(ctx.payment_token.balance(&ctx.escrow_id), 1_000);
 
     let raised_at = env.ledger().timestamp();
     env.ledger().set_timestamp(raised_at + 604_801);
-    ctx.escrow.resolve_dispute(
-        &ctx.admin,
-        &ctx.invoice_id,
-        &Symbol::new(&env, "seller"),
-    );
+    ctx.escrow
+        .resolve_dispute(&ctx.admin, &ctx.invoice_id, &Symbol::new(&env, "seller"));
 
-    assert_eq!(ctx.escrow.get_escrow_status(&ctx.invoice_id), EscrowStatus::Refunded);
+    assert_eq!(
+        ctx.escrow.get_escrow_status(&ctx.invoice_id),
+        EscrowStatus::Refunded
+    );
     assert_eq!(ctx.payment_token.balance(&ctx.buyer), 1_000);
     assert_eq!(ctx.payment_token.balance(&ctx.seller), 0);
     assert_eq!(ctx.payment_token.balance(&ctx.escrow_id), 0);
@@ -1638,14 +1661,14 @@ fn test_integration_refund_restores_capacity() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 27. Referral contract integration
+// 27. ReferralContract contract integration
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Register a referral contract, initialize it, bind the escrow as its only
 /// allowed caller, and bind the referral contract on the escrow.
-fn wire_referral<'a>(ctx: &'a Ctx<'a>, referral_fee_bps: u32) -> ReferralClient<'a> {
-    let referral_id = ctx.env.register(Referral, ());
-    let referral = ReferralClient::new(&ctx.env, &referral_id);
+fn wire_referral<'a>(ctx: &'a Ctx<'a>, referral_fee_bps: u32) -> ReferralContractClient<'a> {
+    let referral_id = ctx.env.register(ReferralContract, ());
+    let referral = ReferralContractClient::new(&ctx.env, &referral_id);
     referral.initialize(&ctx.admin, &referral_fee_bps, &ctx.payment_token.address);
     referral.set_escrow(&ctx.admin, &Some(ctx.escrow_id.clone()));
     ctx.escrow.set_referral_contract(&referral_id);
@@ -1703,8 +1726,10 @@ fn test_integration_referral_fees_accumulate_across_investments() {
     );
 
     // Two separate investments by the same referee.
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &400);
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &600);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &400);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &600);
 
     // 5% of 400 = 20, 5% of 600 = 30 → 50 total.
     let stats = referral.get_referral_stats(&referrer);
@@ -1747,7 +1772,7 @@ fn test_integration_referral_misconfigured_does_not_block_funding() {
 
     // Point the escrow at an uninitialized referral contract: the accrual call
     // fails, is swallowed (best-effort), and funding must still succeed.
-    let broken_referral_id = env.register(Referral, ());
+    let broken_referral_id = env.register(ReferralContract, ());
     ctx.escrow.set_referral_contract(&broken_referral_id);
 
     create_and_fund(&ctx, 1_000, 99_999);
@@ -1765,8 +1790,8 @@ fn test_integration_referral_unbound_caller_rejected_but_funding_continues() {
     env.mock_all_auths();
     let ctx = setup(&env, 300, "INVREF5", 1_000, 0);
 
-    let referral_id = env.register(Referral, ());
-    let referral = ReferralClient::new(&env, &referral_id);
+    let referral_id = env.register(ReferralContract, ());
+    let referral = ReferralContractClient::new(&env, &referral_id);
     referral.initialize(&ctx.admin, &500, &ctx.payment_token.address);
 
     // Bind a *different* escrow as the only allowed caller → accrual rejected,
@@ -1812,14 +1837,16 @@ fn test_integration_clear_referral_contract_stops_accrual() {
         &None,
     );
 
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &400);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &400);
     assert_eq!(referral.get_referral_stats(&referrer).pending, 20);
 
     // Clear the binding: further investments no longer accrue.
     ctx.escrow.clear_referral_contract();
     assert!(ctx.escrow.get_config().referral_contract.is_none());
 
-    ctx.escrow.fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &600);
+    ctx.escrow
+        .fund_escrow_legacy(&ctx.invoice_id, &ctx.buyer, &600);
     assert_eq!(referral.get_referral_stats(&referrer).pending, 20);
     assert_eq!(
         ctx.escrow.get_escrow_status(&ctx.invoice_id),
@@ -1833,7 +1860,7 @@ fn test_integration_set_referral_contract_admin_only() {
     env.mock_all_auths();
     let ctx = setup(&env, 300, "INVREF7", 0, 0);
 
-    let referral_id = env.register(Referral, ());
+    let referral_id = env.register(ReferralContract, ());
 
     // Without admin authorization the binding fails.
     env.set_auths(&[]);

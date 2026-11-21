@@ -8,7 +8,9 @@ use soroban_sdk::testutils::{Address as _, Ledger as _};
 
 /// Absolute ledger until which `key` stays live.
 fn live_until(env: &Env, id: &Address, key: &StorageKey) -> u32 {
-    env.as_contract(id, || env.ledger().sequence() + env.storage().persistent().get_ttl(key))
+    env.as_contract(id, || {
+        env.ledger().sequence() + env.storage().persistent().get_ttl(key)
+    })
 }
 
 #[test]

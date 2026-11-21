@@ -13,6 +13,9 @@
 //!      `cancel_syndicate` to return uncommitted funds.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -52,9 +55,7 @@ fn next_id(env: &Env) -> u32 {
         .instance()
         .get(&StorageKey::NextId)
         .unwrap_or(1u32);
-    env.storage()
-        .instance()
-        .set(&StorageKey::NextId, &(id + 1));
+    env.storage().instance().set(&StorageKey::NextId, &(id + 1));
     id
 }
 
@@ -159,7 +160,7 @@ impl InvoiceCoInvestment {
         // Transfer tokens to the contract (held in escrow).
         token::Client::new(&env, &cfg.token).transfer(
             &investor,
-            &env.current_contract_address(),
+            env.current_contract_address(),
             &amount,
         );
 
@@ -237,7 +238,11 @@ impl InvoiceCoInvestment {
         let mut total_returned: i128 = 0;
         for i in 0..syndicate.co_investments.len() {
             let entry = syndicate.co_investments.get_unchecked(i);
-            tok.transfer(&env.current_contract_address(), &entry.investor, &entry.amount);
+            tok.transfer(
+                &env.current_contract_address(),
+                &entry.investor,
+                &entry.amount,
+            );
             total_returned = total_returned
                 .checked_add(entry.amount)
                 .ok_or(Error::Overflow)?;

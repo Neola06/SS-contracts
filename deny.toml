@@ -30,6 +30,9 @@ ignore = [
     # new major of the Soroban stack. It is a `macro_rules!` helper with no
     # runtime code in the shipped WASM.
     { id = "RUSTSEC-2024-0436", reason = "unmaintained; transitive build-dep of soroban-env-host, no safe upgrade" },
+    # crypto-bigint 0.5.5 is a transitive dependency of soroban-env-host.
+    # The advisory has no available safe replacement in the pinned Soroban SDK graph.
+    { id = "RUSTSEC-2026-0387", reason = "transitive build dependency of soroban-env-host; no patched version resolvable in the pinned SDK graph" },
 ]
 
 [licenses]

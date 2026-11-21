@@ -103,7 +103,8 @@ fn no_promotion_and_no_tiers_uses_default_fee() {
 fn promotion_applies_only_between_start_and_expiry_ledgers() {
     let env = Env::default();
     let ctx = setup(&env);
-    ctx.distributor.set_fee_promotion(&ctx.admin, &promo(100, 100, 200));
+    ctx.distributor
+        .set_fee_promotion(&ctx.admin, &promo(100, 100, 200));
 
     // (ledger, expected fee): before start, exact start, last active, exact expiry.
     let matrix = [(99u32, 500i128), (100, 100), (199, 100), (200, 500)];
@@ -130,7 +131,8 @@ fn active_promotion_overrides_tiers_and_tiers_resume_after_expiry() {
             },
         ],
     );
-    ctx.distributor.set_fee_promotion(&ctx.admin, &promo(50, 10, 20));
+    ctx.distributor
+        .set_fee_promotion(&ctx.admin, &promo(50, 10, 20));
 
     set_ledger(&env, 10);
     assert_eq!(preview_fee(&ctx, "T0"), 50);
@@ -171,7 +173,8 @@ fn overlapping_tiers_resolve_to_first_stored_tier() {
 fn cleared_promotion_no_longer_applies() {
     let env = Env::default();
     let ctx = setup(&env);
-    ctx.distributor.set_fee_promotion(&ctx.admin, &promo(100, 0, 1_000));
+    ctx.distributor
+        .set_fee_promotion(&ctx.admin, &promo(100, 0, 1_000));
     assert_eq!(preview_fee(&ctx, "C0"), 100);
     ctx.distributor.set_fee_promotion(&ctx.admin, &None);
     assert_eq!(ctx.distributor.get_fee_promotion(), None);
@@ -183,15 +186,18 @@ fn set_fee_promotion_rejects_invalid_input_and_non_admin() {
     let env = Env::default();
     let ctx = setup(&env);
     assert_eq!(
-        ctx.distributor.try_set_fee_promotion(&ctx.admin, &promo(100, 50, 50)),
+        ctx.distributor
+            .try_set_fee_promotion(&ctx.admin, &promo(100, 50, 50)),
         Err(Ok(Error::InvalidAmount))
     );
     assert_eq!(
-        ctx.distributor.try_set_fee_promotion(&ctx.admin, &promo(10_001, 0, 50)),
+        ctx.distributor
+            .try_set_fee_promotion(&ctx.admin, &promo(10_001, 0, 50)),
         Err(Ok(Error::InvalidBps))
     );
     assert_eq!(
-        ctx.distributor.try_set_fee_promotion(&Address::generate(&env), &promo(100, 0, 50)),
+        ctx.distributor
+            .try_set_fee_promotion(&Address::generate(&env), &promo(100, 0, 50)),
         Err(Ok(Error::Unauthorized))
     );
     assert_eq!(ctx.distributor.get_fee_promotion(), None);
