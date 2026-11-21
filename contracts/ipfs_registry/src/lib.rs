@@ -3,10 +3,10 @@
 #![allow(dead_code)]
 #![allow(deprecated, unused_variables, unused_mut, dead_code, clippy::too_many_arguments, clippy::needless_borrows_for_generic_args, clippy::len_zero, clippy::collapsible_if, clippy::unnecessary_cast, clippy::implicit_saturating_sub)]
 
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String, Vec, Symbol};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String, Symbol, Vec};
 
 /// Issue #580: IPFS document hash registry for invoice verification
-/// 
+///
 /// Stores content hashes for invoice-supporting documents, allowing investors
 /// to verify document integrity against on-chain records.
 
@@ -39,9 +39,9 @@ pub struct DocumentVersion {
 
 #[contracttype]
 pub enum DataKey {
-    Issuer(u64), // invoice_id -> issuer address
-    Documents(u64), // invoice_id -> Vec<Document>
-    DocCounter(u64), // invoice_id -> next doc_id
+    Issuer(u64),              // invoice_id -> issuer address
+    Documents(u64),           // invoice_id -> Vec<Document>
+    DocCounter(u64),          // invoice_id -> next doc_id
     VersionHistory(u64, u64), // (invoice_id, doc_id) -> Vec<DocumentVersion>
 }
 
@@ -59,7 +59,7 @@ impl IpfsRegistryContract {
         ipfs_hash: String,
     ) -> u64 {
         issuer.require_auth();
-        
+
         // Store issuer if first document
         if !env.storage().persistent().has(&DataKey::Issuer(invoice_id)) {
             env.storage()
@@ -153,7 +153,7 @@ impl IpfsRegistryContract {
             .persistent()
             .get(&DataKey::Issuer(invoice_id))
             .expect("Invoice not found");
-        
+
         if stored_issuer != issuer {
             panic!("Not the issuer");
         }

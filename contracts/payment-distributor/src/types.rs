@@ -24,6 +24,26 @@ pub enum StorageKey {
     RoleGrant(soroban_sdk::Symbol, soroban_sdk::Address),
     /// Instance: optional time-boxed promotional platform fee.
     FeePromotion,
+    /// Persistent: per-recipient payout recovery receipt by payout_id.
+    PayoutRec(soroban_sdk::BytesN<32>),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PayoutStatus {
+    pub recipient: Address,
+    pub amount: i128,
+    pub paid: bool,
+    pub failure_reason: Option<soroban_sdk::Symbol>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PayoutReceipt {
+    pub payout_id: soroban_sdk::BytesN<32>,
+    pub results: Vec<PayoutStatus>,
+    pub total_paid: i128,
+    pub all_succeeded: bool,
 }
 
 #[contracttype]

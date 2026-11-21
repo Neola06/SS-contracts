@@ -49,6 +49,7 @@ impl PortfolioNavSnapshotContract {
         if caller != admin && caller != operator {
             return Err(Error::Unauthorized);
         }
+        caller.require_auth();
 
         if price < 0 {
             return Err(Error::InvalidAmount);
@@ -82,6 +83,7 @@ impl PortfolioNavSnapshotContract {
         if caller != admin && caller != operator {
             return Err(Error::Unauthorized);
         }
+        caller.require_auth();
 
         if balance < 0 {
             return Err(Error::InvalidAmount);

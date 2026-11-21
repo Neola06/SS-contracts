@@ -516,10 +516,14 @@ pub fn currency_invested(
     );
 }
 
-/// Publish a change to a currency's maximum FX quote age.
-pub fn currency_max_age_set(env: &Env, currency: &Symbol, max_age_secs: u64) {
+pub fn allocation_applied(
+    env: &Env,
+    invoice_id: &BytesN<32>,
+    strategy: crate::types::AllocationStrategy,
+    total_allocated: i128,
+) {
     env.events().publish(
-        (Symbol::new(env, "currency_max_age_set"), currency.clone()),
-        max_age_secs,
+        (Symbol::new(env, "allocation_applied"), invoice_id.clone()),
+        (strategy as u32, total_allocated),
     );
 }

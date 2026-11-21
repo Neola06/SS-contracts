@@ -1,3 +1,4 @@
+#![cfg(test)]
 #![allow(deprecated, unused_variables, dead_code, unused_mut, clippy::all)]
 //! Unit tests for the invoice token contract.
 
@@ -3361,5 +3362,676 @@ fn issue457_random_walk_mint_transfer_burn_conserves_every_step() {
         let held = issue457_sum_balances(&client, &wallets);
         assert_eq!(held, minted - burned, "step {}", step);
         assert_eq!(client.total_supply(), minted - burned, "step {}", step);
+    }
+}
+
+// ── Fuzz targets for invoice token mint/burn/transfer (Issue #771) ────────────
+
+// Property-based fuzz tests using a deterministic pseudo-random generator
+// to exercise token accounting invariants under arbitrary operation sequences.
+
+fn lcg_next(state: &mut u64) -> u64 {
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    *state
+}
+
+fn lcg_amount(state: &mut u64, max: i128) -> i128 {
+    1 + (lcg_next(state) as i128) % max
+}
+
+/// Simple state model for tracking expected balances and supply
+struct TokenModel {
+    balances: std::collections::HashMap<Address, i128>,
+    supply: i128,
+}
+
+impl TokenModel {
+    fn new() -> Self {
+        Self {
+            balances: std::collections::HashMap::new(),
+            supply: 0,
+        }
+    }
+
+    fn balance(&self, addr: &Address) -> i128 {
+        *self.balances.get(addr).unwrap_or(&0)
+    }
+
+    fn mint(&mut self, to: Address, amount: i128) {
+        *self.balances.entry(to).or_insert(0) += amount;
+        self.supply += amount;
+    }
+
+    fn burn(&mut self, from: &Address, amount: i128) -> Result<(), ()> {
+        let bal = self.balances.get_mut(from).ok_or(())?;
+        if *bal < amount {
+            return Err(());
+        }
+        *bal -= amount;
+        self.supply -= amount;
+        Ok(())
+    }
+
+    fn transfer(&mut self, from: &Address, to: &Address, amount: i128) -> Result<(), ()> {
+        let from_bal = self.balances.get_mut(from).ok_or(())?;
+        if *from_bal < amount {
+            return Err(());
+        }
+        *from_bal -= amount;
+        *self.balances.entry(to.clone()).or_insert(0) += amount;
+        Ok(())
+    }
+
+    fn assert_invariant(&self, client: &InvoiceTokenClient<'_>) {
+        assert_eq!(client.total_supply(), self.supply, "supply mismatch");
+        for (addr, expected) in &self.balances {
+            assert_eq!(
+                client.balance(addr),
+                *expected,
+                "balance mismatch for {:?}",
+                addr
+            );
+        }
+        // Also check sum of all balances equals supply
+        let sum: i128 = self.balances.values().sum();
+        assert_eq!(sum, self.supply, "balance sum != supply");
+    }
+}
+
+#[test]
+fn fuzz_mint_burn_transfer_conservation() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, minter) = setup_token(&env);
+    client.set_transfer_locked(&admin, &false);
+
+    let mut state: u64 = 0xFUZZ_SEED_1;
+    let mut model = TokenModel::new();
+    let mut wallets = Vec::new(&env);
+
+    // Generate 8 test wallets
+    for _ in 0..8 {
+        wallets.push_back(Address::generate(&env));
+    }
+
+    // Run 200 random operations
+    for step in 0..200 {
+        let wi = (lcg_next(&mut state) % 8) as usize;
+        let w = wallets.get(wi as u32).unwrap();
+        let bal = client.balance(&w);
+
+        match lcg_next(&mut state) % 4 {
+            0 => {
+                // Mint operation
+                let amt = lcg_amount(&mut state, 100_000);
+                client.mint(&w, &amt, &minter);
+                model.mint(w, amt);
+            }
+            1 if bal >= 2 => {
+                // Transfer operation
+                let mut ti = (lcg_next(&mut state) % 8) as usize;
+                if ti == wi {
+                    ti = (ti + 1) % 8;
+                }
+                let to = wallets.get(ti as u32).unwrap();
+                let amt = 1 + (lcg_next(&mut state) as i128) % (bal - 1);
+                client.transfer(&w, &to, &amt);
+                model.transfer(&w, &to, amt).unwrap();
+            }
+            2 if bal >= 1 => {
+                // Burn operation
+                let burn = 1 + (lcg_next(&mut state) as i128) % bal;
+                client.burn(&w, &burn);
+                model.burn(&w, burn).unwrap();
+            }
+            _ => {
+                // No-op for other cases
+            }
+        }
+        model.assert_invariant(&client);
+    }
+}
+
+#[test]
+fn fuzz_burn_from_allowance_tracking() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, minter) = setup_token(&env);
+    client.set_transfer_locked(&admin, &false);
+
+    let mut state: u64 = 0xFUZZ_SEED_2;
+    let mut wallets = Vec::new(&env);
+    let mut spenders = Vec::new(&env);
+
+    // Generate 4 holders and 4 spenders
+    for _ in 0..4 {
+        wallets.push_back(Address::generate(&env));
+        spenders.push_back(Address::generate(&env));
+    }
+
+    // Setup: mint to holders and approve spenders
+    for w in wallets.iter() {
+        let amt = lcg_amount(&mut state, 100_000);
+        client.mint(&w, &amt, &minter);
+    }
+    for (i, s) in spenders.iter().enumerate() {
+        let w = wallets.get(i as u32).unwrap();
+        let approve_amt = lcg_amount(&mut state, 50_000);
+        client.approve(&w, &s, &approve_amt, &u32::MAX);
+    }
+
+    // Model tracking
+    struct AllowanceModel {
+        balances: std::collections::HashMap<Address, i128>,
+        allowances: std::collections::HashMap<(Address, Address), i128>,
+        supply: i128,
+    }
+
+    impl AllowanceModel {
+        fn new() -> Self {
+            Self {
+                balances: std::collections::HashMap::new(),
+                allowances: std::collections::HashMap::new(),
+                supply: 0,
+            }
+        }
+        fn balance(&self, addr: &Address) -> i128 {
+            *self.balances.get(addr).unwrap_or(&0)
+        }
+        fn allowance(&self, from: &Address, spender: &Address) -> i128 {
+            *self
+                .allowances
+                .get(&(from.clone(), spender.clone()))
+                .unwrap_or(&0)
+        }
+        fn mint(&mut self, to: Address, amount: i128) {
+            *self.balances.entry(to).or_insert(0) += amount;
+            self.supply += amount;
+        }
+        fn approve(&mut self, from: Address, spender: Address, amount: i128) {
+            self.allowances.insert((from, spender), amount);
+        }
+        fn burn_from(&mut self, spender: &Address, from: &Address, amount: i128) -> Result<(), ()> {
+            let allow = self
+                .allowances
+                .get_mut(&(from.clone(), spender.clone()))
+                .ok_or(())?;
+            if *allow < amount {
+                return Err(());
+            }
+            *allow -= amount;
+            let bal = self.balances.get_mut(from).ok_or(())?;
+            if *bal < amount {
+                return Err(());
+            }
+            *bal -= amount;
+            self.supply -= amount;
+            Ok(())
+        }
+        fn assert_invariant(&self, client: &InvoiceTokenClient<'_>) {
+            assert_eq!(client.total_supply(), self.supply, "supply mismatch");
+            for (addr, expected) in &self.balances {
+                assert_eq!(
+                    client.balance(addr),
+                    *expected,
+                    "balance mismatch for {:?}",
+                    addr
+                );
+            }
+            for ((from, spender), expected) in &self.allowances {
+                assert_eq!(
+                    client.allowance(from, spender),
+                    *expected,
+                    "allowance mismatch"
+                );
+            }
+            let sum: i128 = self.balances.values().sum();
+            assert_eq!(sum, self.supply, "balance sum != supply");
+        }
+    }
+
+    let mut model = AllowanceModel::new();
+    for w in wallets.iter() {
+        model.mint(w, client.balance(&w));
+    }
+    for (i, s) in spenders.iter().enumerate() {
+        let w = wallets.get(i as u32).unwrap();
+        model.approve(w, s, client.allowance(w, s));
+    }
+
+    // Run 150 random burn_from operations
+    for _ in 0..150 {
+        let wi = (lcg_next(&mut state) % 4) as usize;
+        let si = (lcg_next(&mut state) % 4) as usize;
+        let w = wallets.get(wi as u32).unwrap();
+        let s = spenders.get(si as u32).unwrap();
+        let bal = client.balance(&w);
+        let allow = client.allowance(&w, &s);
+
+        if bal >= 1 && allow >= 1 {
+            let burn = 1 + (lcg_next(&mut state) as i128) % bal.min(allow);
+            client.burn_from(&s, &w, &burn);
+            model.burn_from(&s, &w, burn).unwrap();
+        }
+        model.assert_invariant(&client);
+    }
+}
+
+#[test]
+fn fuzz_transfer_from_allowance_tracking() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, minter) = setup_token(&env);
+    client.set_transfer_locked(&admin, &false);
+
+    let mut state: u64 = 0xFUZZ_SEED_3;
+    let mut wallets = Vec::new(&env);
+    let mut spenders = Vec::new(&env);
+
+    // Generate 4 holders and 4 spenders
+    for _ in 0..4 {
+        wallets.push_back(Address::generate(&env));
+        spenders.push_back(Address::generate(&env));
+    }
+
+    // Setup: mint to holders and approve spenders
+    for w in wallets.iter() {
+        let amt = lcg_amount(&mut state, 100_000);
+        client.mint(&w, &amt, &minter);
+    }
+    for (i, s) in spenders.iter().enumerate() {
+        let w = wallets.get(i as u32).unwrap();
+        let approve_amt = lcg_amount(&mut state, 50_000);
+        client.approve(&w, &s, &approve_amt, &u32::MAX);
+    }
+
+    // Model tracking
+    struct TransferFromModel {
+        balances: std::collections::HashMap<Address, i128>,
+        allowances: std::collections::HashMap<(Address, Address), i128>,
+        supply: i128,
+    }
+
+    impl TransferFromModel {
+        fn new() -> Self {
+            Self {
+                balances: std::collections::HashMap::new(),
+                allowances: std::collections::HashMap::new(),
+                supply: 0,
+            }
+        }
+        fn balance(&self, addr: &Address) -> i128 {
+            *self.balances.get(addr).unwrap_or(&0)
+        }
+        fn allowance(&self, from: &Address, spender: &Address) -> i128 {
+            *self
+                .allowances
+                .get(&(from.clone(), spender.clone()))
+                .unwrap_or(&0)
+        }
+        fn mint(&mut self, to: Address, amount: i128) {
+            *self.balances.entry(to).or_insert(0) += amount;
+            self.supply += amount;
+        }
+        fn approve(&mut self, from: Address, spender: Address, amount: i128) {
+            self.allowances.insert((from, spender), amount);
+        }
+        fn transfer_from(
+            &mut self,
+            spender: &Address,
+            from: &Address,
+            to: &Address,
+            amount: i128,
+        ) -> Result<(), ()> {
+            let allow = self
+                .allowances
+                .get_mut(&(from.clone(), spender.clone()))
+                .ok_or(())?;
+            if *allow < amount {
+                return Err(());
+            }
+            *allow -= amount;
+            let from_bal = self.balances.get_mut(from).ok_or(())?;
+            if *from_bal < amount {
+                return Err(());
+            }
+            *from_bal -= amount;
+            *self.balances.entry(to.clone()).or_insert(0) += amount;
+            Ok(())
+        }
+        fn assert_invariant(&self, client: &InvoiceTokenClient<'_>) {
+            assert_eq!(client.total_supply(), self.supply, "supply mismatch");
+            for (addr, expected) in &self.balances {
+                assert_eq!(
+                    client.balance(addr),
+                    *expected,
+                    "balance mismatch for {:?}",
+                    addr
+                );
+            }
+            for ((from, spender), expected) in &self.allowances {
+                assert_eq!(
+                    client.allowance(from, spender),
+                    *expected,
+                    "allowance mismatch"
+                );
+            }
+            let sum: i128 = self.balances.values().sum();
+            assert_eq!(sum, self.supply, "balance sum != supply");
+        }
+    }
+
+    let mut model = TransferFromModel::new();
+    for w in wallets.iter() {
+        model.mint(w, client.balance(&w));
+    }
+    for (i, s) in spenders.iter().enumerate() {
+        let w = wallets.get(i as u32).unwrap();
+        model.approve(w, s, client.allowance(w, s));
+    }
+
+    // Run 150 random transfer_from operations
+    for _ in 0..150 {
+        let wi = (lcg_next(&mut state) % 4) as usize;
+        let si = (lcg_next(&mut state) % 4) as usize;
+        let ti = (lcg_next(&mut state) % 4) as usize;
+
+        if wi == ti {
+            continue;
+        }
+
+        let w = wallets.get(wi as u32).unwrap();
+        let s = spenders.get(si as u32).unwrap();
+        let to = wallets.get(ti as u32).unwrap();
+        let bal = client.balance(&w);
+        let allow = client.allowance(&w, &s);
+
+        if bal >= 1 && allow >= 1 {
+            let amt = 1 + (lcg_next(&mut state) as i128) % bal.min(allow);
+            client.transfer_from(&s, &w, &to, &amt);
+            model.transfer_from(&s, &w, &to, amt).unwrap();
+        }
+        model.assert_invariant(&client);
+    }
+}
+
+#[test]
+fn fuzz_freeze_thaw_account() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, minter) = setup_token(&env);
+    client.set_transfer_locked(&admin, &false);
+
+    let mut state: u64 = 0xFUZZ_SEED_4;
+    let mut wallets = Vec::new(&env);
+
+    // Generate 6 test wallets
+    for _ in 0..6 {
+        wallets.push_back(Address::generate(&env));
+    }
+
+    // Mint to all wallets
+    for w in wallets.iter() {
+        let amt = lcg_amount(&mut state, 100_000);
+        client.mint(&w, &amt, &minter);
+    }
+
+    // Model tracking frozen accounts
+    struct FreezeModel {
+        balances: std::collections::HashMap<Address, i128>,
+        frozen: std::collections::HashSet<Address>,
+        supply: i128,
+    }
+
+    impl FreezeModel {
+        fn new() -> Self {
+            Self {
+                balances: std::collections::HashMap::new(),
+                frozen: std::collections::HashSet::new(),
+                supply: 0,
+            }
+        }
+        fn balance(&self, addr: &Address) -> i128 {
+            *self.balances.get(addr).unwrap_or(&0)
+        }
+        fn is_frozen(&self, addr: &Address) -> bool {
+            self.frozen.contains(addr)
+        }
+        fn mint(&mut self, to: Address, amount: i128) {
+            *self.balances.entry(to).or_insert(0) += amount;
+            self.supply += amount;
+        }
+        fn freeze(&mut self, addr: Address) {
+            self.frozen.insert(addr);
+        }
+        fn unfreeze(&mut self, addr: &Address) {
+            self.frozen.remove(addr);
+        }
+        fn transfer(&mut self, from: &Address, to: &Address, amount: i128) -> Result<(), ()> {
+            if self.frozen.contains(from) || self.frozen.contains(to) {
+                return Err(()); // Frozen accounts can't transfer
+            }
+            let from_bal = self.balances.get_mut(from).ok_or(())?;
+            if *from_bal < amount {
+                return Err(());
+            }
+            *from_bal -= amount;
+            *self.balances.entry(to.clone()).or_insert(0) += amount;
+            Ok(())
+        }
+        fn burn(&mut self, from: &Address, amount: i128) -> Result<(), ()> {
+            if self.frozen.contains(from) {
+                return Err(()); // Frozen accounts can't burn
+            }
+            let bal = self.balances.get_mut(from).ok_or(())?;
+            if *bal < amount {
+                return Err(());
+            }
+            *bal -= amount;
+            self.supply -= amount;
+            Ok(())
+        }
+        fn assert_invariant(&self, client: &InvoiceTokenClient<'_>) {
+            assert_eq!(client.total_supply(), self.supply, "supply mismatch");
+            for (addr, expected) in &self.balances {
+                assert_eq!(
+                    client.balance(addr),
+                    *expected,
+                    "balance mismatch for {:?}",
+                    addr
+                );
+                assert_eq!(
+                    client.is_account_frozen(addr).unwrap(),
+                    self.is_frozen(addr),
+                    "frozen mismatch"
+                );
+            }
+            let sum: i128 = self.balances.values().sum();
+            assert_eq!(sum, self.supply, "balance sum != supply");
+        }
+    }
+
+    let mut model = FreezeModel::new();
+    for w in wallets.iter() {
+        model.mint(w, client.balance(&w));
+    }
+
+    // Run 100 random operations including freeze/thaw
+    for _ in 0..100 {
+        let wi = (lcg_next(&mut state) % 6) as usize;
+        let w = wallets.get(wi as u32).unwrap();
+        let bal = client.balance(&w);
+
+        match lcg_next(&mut state) % 5 {
+            0 => {
+                // Freeze
+                client.freeze_account(&w);
+                model.freeze(w);
+            }
+            1 if model.is_frozen(&w) => {
+                // Unfreeze
+                client.unfreeze_account(&w);
+                model.unfreeze(&w);
+            }
+            2 if bal >= 2 && !model.is_frozen(&w) => {
+                // Transfer
+                let mut ti = (lcg_next(&mut state) % 6) as usize;
+                if ti == wi {
+                    ti = (ti + 1) % 6;
+                }
+                let to = wallets.get(ti as u32).unwrap();
+                if !model.is_frozen(&to) {
+                    let amt = 1 + (lcg_next(&mut state) as i128) % (bal - 1);
+                    client.transfer(&w, &to, &amt);
+                    model.transfer(&w, &to, amt).unwrap();
+                }
+            }
+            3 if bal >= 1 && !model.is_frozen(&w) => {
+                // Burn
+                let burn = 1 + (lcg_next(&mut state) as i128) % bal;
+                client.burn(&w, &burn);
+                model.burn(&w, burn).unwrap();
+            }
+            _ => {}
+        }
+        model.assert_invariant(&client);
+    }
+}
+
+#[test]
+fn fuzz_pause_unpause_operations() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, minter) = setup_token(&env);
+    client.set_transfer_locked(&admin, &false);
+
+    let mut state: u64 = 0xFUZZ_SEED_5;
+    let mut wallets = Vec::new(&env);
+
+    // Generate 4 test wallets
+    for _ in 0..4 {
+        wallets.push_back(Address::generate(&env));
+    }
+
+    // Mint to all wallets
+    for w in wallets.iter() {
+        let amt = lcg_amount(&mut state, 100_000);
+        client.mint(&w, &amt, &minter);
+    }
+
+    // Model tracking paused state
+    struct PauseModel {
+        balances: std::collections::HashMap<Address, i128>,
+        paused: bool,
+        supply: i128,
+    }
+
+    impl PauseModel {
+        fn new() -> Self {
+            Self {
+                balances: std::collections::HashMap::new(),
+                paused: false,
+                supply: 0,
+            }
+        }
+        fn balance(&self, addr: &Address) -> i128 {
+            *self.balances.get(addr).unwrap_or(&0)
+        }
+        fn mint(&mut self, to: Address, amount: i128) {
+            if self.paused {
+                return;
+            }
+            *self.balances.entry(to).or_insert(0) += amount;
+            self.supply += amount;
+        }
+        fn transfer(&mut self, from: &Address, to: &Address, amount: i128) -> Result<(), ()> {
+            if self.paused {
+                return Err(());
+            }
+            let from_bal = self.balances.get_mut(from).ok_or(())?;
+            if *from_bal < amount {
+                return Err(());
+            }
+            *from_bal -= amount;
+            *self.balances.entry(to.clone()).or_insert(0) += amount;
+            Ok(())
+        }
+        fn burn(&mut self, from: &Address, amount: i128) -> Result<(), ()> {
+            if self.paused {
+                return Err(());
+            }
+            let bal = self.balances.get_mut(from).ok_or(())?;
+            if *bal < amount {
+                return Err(());
+            }
+            *bal -= amount;
+            self.supply -= amount;
+            Ok(())
+        }
+        fn set_paused(&mut self, paused: bool) {
+            self.paused = paused;
+        }
+        fn assert_invariant(&self, client: &InvoiceTokenClient<'_>) {
+            assert_eq!(client.total_supply(), self.supply, "supply mismatch");
+            assert_eq!(client.paused().unwrap(), self.paused, "paused mismatch");
+            for (addr, expected) in &self.balances {
+                assert_eq!(
+                    client.balance(addr),
+                    *expected,
+                    "balance mismatch for {:?}",
+                    addr
+                );
+            }
+            let sum: i128 = self.balances.values().sum();
+            assert_eq!(sum, self.supply, "balance sum != supply");
+        }
+    }
+
+    let mut model = PauseModel::new();
+    for w in wallets.iter() {
+        model.mint(w, client.balance(&w));
+    }
+
+    // Run 80 random operations including pause/unpause
+    for _ in 0..80 {
+        let wi = (lcg_next(&mut state) % 4) as usize;
+        let w = wallets.get(wi as u32).unwrap();
+        let bal = client.balance(&w);
+
+        match lcg_next(&mut state) % 5 {
+            0 => {
+                // Toggle pause
+                let new_paused = !model.paused;
+                client.set_paused(&new_paused);
+                model.set_paused(new_paused);
+            }
+            1 if !model.paused => {
+                // Mint
+                let amt = lcg_amount(&mut state, 50_000);
+                client.mint(&w, &amt, &minter);
+                model.mint(w, amt);
+            }
+            2 if bal >= 2 && !model.paused => {
+                // Transfer
+                let mut ti = (lcg_next(&mut state) % 4) as usize;
+                if ti == wi {
+                    ti = (ti + 1) % 4;
+                }
+                let to = wallets.get(ti as u32).unwrap();
+                let amt = 1 + (lcg_next(&mut state) as i128) % (bal - 1);
+                client.transfer(&w, &to, &amt);
+                model.transfer(&w, &to, amt).unwrap();
+            }
+            3 if bal >= 1 && !model.paused => {
+                // Burn
+                let burn = 1 + (lcg_next(&mut state) as i128) % bal;
+                client.burn(&w, &burn);
+                model.burn(&w, burn).unwrap();
+            }
+            _ => {}
+        }
+        model.assert_invariant(&client);
     }
 }

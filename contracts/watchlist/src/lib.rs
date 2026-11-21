@@ -26,7 +26,9 @@ impl Watchlist {
             return Err(Error::AlreadyInitialized);
         }
         env.storage().instance().set(&StorageKey::Admin, &admin);
-        env.storage().instance().set(&StorageKey::Operator, &operator);
+        env.storage()
+            .instance()
+            .set(&StorageKey::Operator, &operator);
         Ok(())
     }
 
@@ -38,11 +40,17 @@ impl Watchlist {
             .ok_or(Error::NotInitialized)?;
         admin.require_auth();
 
-        env.storage().instance().set(&StorageKey::Operator, &operator);
+        env.storage()
+            .instance()
+            .set(&StorageKey::Operator, &operator);
         Ok(())
     }
 
-    pub fn add_to_watchlist(env: Env, wallet: Address, invoice_id: BytesN<32>) -> Result<(), Error> {
+    pub fn add_to_watchlist(
+        env: Env,
+        wallet: Address,
+        invoice_id: BytesN<32>,
+    ) -> Result<(), Error> {
         wallet.require_auth();
 
         let mut list: Vec<BytesN<32>> = env

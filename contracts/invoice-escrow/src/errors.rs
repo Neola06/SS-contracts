@@ -170,4 +170,6 @@ pub enum Error {
     InvalidCursor = 78,
     /// The invoice has reached its retained receipt-history limit.
     ReceiptLimitReached = 79,
+    /// Pending settlement proposal has expired.
+    SettlementProposalExpired = 78,
 }

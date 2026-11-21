@@ -45,9 +45,11 @@ impl AccreditationRenewalContract {
             .get(&DataKey::Operator)
             .ok_or(Error::NotInitialized)?;
         caller.require_auth();
+
         if caller != admin_addr && caller != operator_addr {
             return Err(Error::Unauthorized);
         }
+        caller.require_auth();
 
         if expiry_timestamp <= env.ledger().timestamp() {
             return Err(Error::InvalidExpiry);

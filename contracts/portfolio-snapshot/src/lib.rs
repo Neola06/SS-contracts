@@ -21,9 +21,7 @@ mod types;
 
 pub use types::{SnapshotData, SnapshotInfo, TokenEntry};
 
-use soroban_sdk::{
-    contract, contractclient, contractimpl, Address, Env, Map, String, Symbol, Vec,
-};
+use soroban_sdk::{contract, contractclient, contractimpl, Address, Env, Map, String, Symbol, Vec};
 
 use errors::Error;
 
@@ -134,13 +132,7 @@ impl PortfolioSnapshot {
         }
 
         storage::set_tokens(&env, &tokens);
-        events::token_registered(
-            &env,
-            &TokenEntry {
-                invoice_id,
-                token,
-            },
-        );
+        events::token_registered(&env, &TokenEntry { invoice_id, token });
         Ok(())
     }
 

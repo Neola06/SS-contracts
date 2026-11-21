@@ -3,10 +3,10 @@
 #![allow(dead_code)]
 #![allow(deprecated, unused_variables, unused_mut, dead_code, clippy::too_many_arguments, clippy::needless_borrows_for_generic_args, clippy::len_zero, clippy::collapsible_if, clippy::unnecessary_cast, clippy::implicit_saturating_sub)]
 
-use soroban_sdk::{contract, contractimpl, contracttype, contracterror, Address, Env, Vec, Symbol};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol, Vec};
 
 /// Issue #579: Minimum funding threshold with refund on failure
-/// 
+///
 /// If an invoice does not reach its minimum funding amount before the window closes,
 /// all investments are automatically refunded.
 
@@ -145,7 +145,7 @@ impl FundingThresholdContract {
         if invoice.current_funding < invoice.min_funding_amount {
             // Funding failed - trigger refunds
             invoice.state = InvoiceState::FundingFailed;
-            
+
             // Get all investments
             let investments: Vec<Investment> = env
                 .storage()
@@ -189,7 +189,9 @@ impl FundingThresholdContract {
 
     /// Get invoice details
     pub fn get_invoice(env: Env, invoice_id: u64) -> Option<Invoice> {
-        env.storage().persistent().get(&DataKey::Invoice(invoice_id))
+        env.storage()
+            .persistent()
+            .get(&DataKey::Invoice(invoice_id))
     }
 
     /// Get all investments for an invoice

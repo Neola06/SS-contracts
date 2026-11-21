@@ -3,10 +3,12 @@
 #![allow(dead_code)]
 #![allow(deprecated, unused_variables, unused_mut, dead_code, clippy::too_many_arguments, clippy::needless_borrows_for_generic_args, clippy::len_zero, clippy::collapsible_if, clippy::unnecessary_cast, clippy::implicit_saturating_sub)]
 
-use soroban_sdk::{contract, contractimpl, contracttype, contracterror, Address, Env, String, Vec, Symbol};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
+};
 
 /// Issue #586: Timelock contract for sensitive admin parameter changes
-/// 
+///
 /// Wraps all sensitive protocol parameter changes behind a timelock requiring
 /// a minimum delay (48h) between proposal and execution.
 
@@ -165,10 +167,8 @@ impl TimelockContract {
             .set(&DataKey::Proposal(proposal_id), &updated_change);
 
         // Emit ChangeCancelled event
-        env.events().publish(
-            (Symbol::new(&env, "ChangeCancelled"), proposal_id),
-            admin,
-        );
+        env.events()
+            .publish((Symbol::new(&env, "ChangeCancelled"), proposal_id), admin);
 
         Ok(())
     }
@@ -184,7 +184,11 @@ impl TimelockContract {
         let mut pending = Vec::new(&env);
 
         for id in 1..=count {
-            if let Some(change) = env.storage().instance().get::<_, Change>(&DataKey::Proposal(id)) {
+            if let Some(change) = env
+                .storage()
+                .instance()
+                .get::<_, Change>(&DataKey::Proposal(id))
+            {
                 if !change.executed && !change.cancelled {
                     pending.push_back(change);
                 }
@@ -200,7 +204,7 @@ impl TimelockContract {
             .instance()
             .get(&DataKey::Admin)
             .expect("Admin not set");
-        
+
         if admin != *address {
             panic!("Not admin");
         }

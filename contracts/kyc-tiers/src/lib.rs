@@ -59,7 +59,7 @@ impl KYCTiersContract {
         admin.require_auth();
 
         let wallet_key = DataKey::WalletKYC(wallet.clone());
-        
+
         // Get old tier if exists
         let old_tier = if let Some(existing) = env
             .storage()
@@ -89,16 +89,14 @@ impl KYCTiersContract {
 
         env.storage().persistent().set(&wallet_key, &wallet_kyc);
 
-        env.events().publish(
-            (symbol_short!("tier_upd"), wallet),
-            (old_tier, tier),
-        );
+        env.events()
+            .publish((symbol_short!("tier_upd"), wallet), (old_tier, tier));
     }
 
     /// Get investment limits for a wallet's current tier
     pub fn get_investment_limit(env: Env, wallet: Address) -> InvestmentLimit {
         let wallet_key = DataKey::WalletKYC(wallet);
-        
+
         let tier = if let Some(wallet_kyc) = env
             .storage()
             .persistent()
@@ -111,16 +109,16 @@ impl KYCTiersContract {
 
         match tier {
             KYCTier::Basic => InvestmentLimit {
-                per_invoice: 1000_0000000,    // 1k with 7 decimals
-                cumulative: 5000_0000000,     // 5k with 7 decimals
+                per_invoice: 1000_0000000, // 1k with 7 decimals
+                cumulative: 5000_0000000,  // 5k with 7 decimals
             },
             KYCTier::Verified => InvestmentLimit {
-                per_invoice: 10000_0000000,   // 10k with 7 decimals
-                cumulative: 50000_0000000,    // 50k with 7 decimals
+                per_invoice: 10000_0000000, // 10k with 7 decimals
+                cumulative: 50000_0000000,  // 50k with 7 decimals
             },
             KYCTier::Accredited => InvestmentLimit {
-                per_invoice: i128::MAX,       // Unlimited
-                cumulative: i128::MAX,        // Unlimited
+                per_invoice: i128::MAX, // Unlimited
+                cumulative: i128::MAX,  // Unlimited
             },
         }
     }
@@ -128,11 +126,11 @@ impl KYCTiersContract {
     /// Validate investment amount against tier limits
     pub fn validate_investment(env: Env, wallet: Address, amount: i128) -> bool {
         let wallet_key = DataKey::WalletKYC(wallet.clone());
-        
-        let (tier, cumulative_invested) = if let Some(wallet_kyc) = env
-            .storage()
-            .persistent()
-            .get::<DataKey, WalletKYC>(&wallet_key)
+
+        let (tier, cumulative_invested) = if let Some(wallet_kyc) =
+            env.storage()
+                .persistent()
+                .get::<DataKey, WalletKYC>(&wallet_key)
         {
             (wallet_kyc.tier, wallet_kyc.cumulative_invested)
         } else {
@@ -166,7 +164,7 @@ impl KYCTiersContract {
     /// Get wallet's current tier
     pub fn get_tier(env: Env, wallet: Address) -> KYCTier {
         let wallet_key = DataKey::WalletKYC(wallet);
-        
+
         if let Some(wallet_kyc) = env
             .storage()
             .persistent()
@@ -181,7 +179,7 @@ impl KYCTiersContract {
     /// Get wallet's cumulative invested amount
     pub fn get_cumulative_invested(env: Env, wallet: Address) -> i128 {
         let wallet_key = DataKey::WalletKYC(wallet);
-        
+
         if let Some(wallet_kyc) = env
             .storage()
             .persistent()
@@ -208,7 +206,7 @@ mod test {
 
         let admin = Address::generate(&env);
         let wallet = Address::generate(&env);
-        
+
         client.initialize(&admin);
         client.set_kyc_tier(&wallet, &KYCTier::Verified);
 
@@ -224,7 +222,7 @@ mod test {
 
         let admin = Address::generate(&env);
         let wallet = Address::generate(&env);
-        
+
         client.initialize(&admin);
         client.set_kyc_tier(&wallet, &KYCTier::Basic);
 
@@ -242,7 +240,7 @@ mod test {
 
         let admin = Address::generate(&env);
         let wallet = Address::generate(&env);
-        
+
         client.initialize(&admin);
         client.set_kyc_tier(&wallet, &KYCTier::Basic);
 
@@ -258,7 +256,7 @@ mod test {
 
         let admin = Address::generate(&env);
         let wallet = Address::generate(&env);
-        
+
         client.initialize(&admin);
         client.set_kyc_tier(&wallet, &KYCTier::Accredited);
 
