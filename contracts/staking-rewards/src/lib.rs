@@ -191,11 +191,6 @@ impl StakingRewards {
             .get(&DataKey::Pool(invoice_id.clone()))
             .unwrap_or(0);
         let new_pool = pool.checked_add(amount).ok_or(Error::Overflow)?;
-        token::Client::new(&env, &invoice.token).transfer(
-            &invoice.issuer,
-            &env.current_contract_address(),
-            &amount,
-        );
         env.storage()
             .persistent()
             .set(&DataKey::Pool(invoice_id), &new_pool);
@@ -241,11 +236,6 @@ impl StakingRewards {
             .unwrap_or(0);
         let new_total = total_staked.checked_add(amount).ok_or(Error::Overflow)?;
 
-        token::Client::new(&env, &invoice.token).transfer(
-            &wallet,
-            &env.current_contract_address(),
-            &amount,
-        );
         env.storage().instance().set(&DataKey::NextStake, &next_id);
         env.storage().persistent().set(
             &DataKey::Stake(id),
@@ -494,15 +484,6 @@ impl StakingRewards {
             .persistent()
             .get(&DataKey::Invoice(stake.invoice_id.clone()))
             .ok_or(Error::InvoiceNotFound)?;
-        let reward = stake
-            .amount
-            .checked_mul(invoice.bonus_bps as i128)
-            .ok_or(Error::Overflow)?
-            .checked_mul((stake.unlock_at - stake.started_at) as i128)
-            .ok_or(Error::Overflow)?
-            .checked_div(10_000 * YEAR as i128)
-            .ok_or(Error::Overflow)?;
-        let pool: i128 = env
         let mut reward = 0i128;
         if let Some(epoch_id) = env
             .storage()

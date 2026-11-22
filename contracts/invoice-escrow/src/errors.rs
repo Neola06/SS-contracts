@@ -171,5 +171,5 @@ pub enum Error {
     /// The invoice has reached its retained receipt-history limit.
     ReceiptLimitReached = 79,
     /// Pending settlement proposal has expired.
-    SettlementProposalExpired = 78,
+    SettlementProposalExpired = 80,
 }
