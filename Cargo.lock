@@ -1280,6 +1280,7 @@ name = "invoice-escrow"
 version = "0.1.0"
 dependencies = [
  "invoice-token",
+ "payment-distributor",
  "proptest",
  "referral",
  "soroban-sdk 27.0.6",
