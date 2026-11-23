@@ -78,9 +78,9 @@ impl ReferralContract {
             .storage()
             .persistent()
             .get(&DataKey::FirstInvestment(wallet.clone()))
-            .unwrap_or(true);
+            .unwrap_or(false);
 
-        if !is_first {
+        if is_first {
             // Not first investment, no reward
             return None;
         }

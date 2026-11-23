@@ -574,10 +574,13 @@ fn oversubscribed_investment_cannot_withdraw_pooled_collateral() {
     f.client.top_up_collateral(&f.id, &200);
     let holder = Address::generate(&f.env);
     f.mint(&holder, 1500);
-    f.client.invest(&f.id, &holder, &1500);
-    assert_eq!(f.client.get_investor_position(&f.id, &holder), 1000);
-    assert_eq!(f.balance(&holder), 500);
-    assert_eq!(f.balance(&f.client.address), 1200);
+    assert_eq!(
+        f.client.try_invest(&f.id, &holder, &1500),
+        Err(Ok(Error::MaxFundingThresholdExceeded))
+    );
+    assert_eq!(f.client.get_investor_position(&f.id, &holder), 0);
+    assert_eq!(f.balance(&holder), 1500);
+    assert_eq!(f.balance(&f.client.address), 200);
 }
 
 #[test]
@@ -638,14 +641,18 @@ fn legacy_payouts_preserve_collateral_and_legacy_creation_respects_the_block() {
     f.client.fund_escrow_legacy(&legacy_id, &investor, &1000);
     f.env.ledger().with_mut(|ledger| ledger.timestamp = 3600);
     f.mint(&debtor, 1100);
-    // The legacy payout formula would consume 100 units of collateral. The
-    // reserve guard must reject atomically, preserving the payer's balance.
+    // The investor receives only the funded share of face value, preserving
+    // the issuer's full collateral reserve through settlement.
     assert_eq!(
         f.client.try_record_payment(&legacy_id, &debtor, &1100),
-        Err(Ok(Error::CollateralReserved))
+        Ok(Ok(()))
     );
-    assert_eq!(f.balance(&debtor), 1100);
-    assert_eq!(f.balance(&f.client.address), 1500);
+    assert_eq!(f.balance(&debtor), 0);
+    assert_eq!(f.balance(&f.client.address), 500);
+    assert_eq!(
+        f.client.get_escrow_status(&legacy_id),
+        invoice_escrow::EscrowStatus::Settled
+    );
     f.client.set_invoice_outstanding(&f.id, &10_000);
     f.client.request_topup(&f.issuer);
     assert_eq!(

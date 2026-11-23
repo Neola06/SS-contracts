@@ -9,11 +9,11 @@ fn setup() -> (Env, CreditScoringClient<'static>, Address) {
     let contract_id = env.register_contract(None, CreditScoring);
     let client = CreditScoringClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
-    client.initialize(&admin).unwrap();
+    client.initialize(&admin);
     (env, client, admin)
 }
 
-fn high_quality_factors(env: &Env) -> IssuerFactors {
+fn high_quality_factors(_env: &Env) -> IssuerFactors {
     IssuerFactors {
         kyc_tier: 3,
         settlement_history: 10,
@@ -22,7 +22,7 @@ fn high_quality_factors(env: &Env) -> IssuerFactors {
     }
 }
 
-fn low_quality_factors(env: &Env) -> IssuerFactors {
+fn low_quality_factors(_env: &Env) -> IssuerFactors {
     IssuerFactors {
         kyc_tier: 0,
         settlement_history: 0,
@@ -35,9 +35,7 @@ fn low_quality_factors(env: &Env) -> IssuerFactors {
 fn test_aaa_tier_for_high_quality_issuer() {
     let (env, client, admin) = setup();
     let issuer = Address::generate(&env);
-    let score = client
-        .compute_credit_score(&admin, &issuer, &high_quality_factors(&env))
-        .unwrap();
+    let score = client.compute_credit_score(&admin, &issuer, &high_quality_factors(&env));
     assert_eq!(score.tier, CreditTier::AAA);
     assert!(score.score >= 90);
 }
@@ -46,9 +44,7 @@ fn test_aaa_tier_for_high_quality_issuer() {
 fn test_c_tier_for_defaulted_issuer() {
     let (env, client, admin) = setup();
     let issuer = Address::generate(&env);
-    let score = client
-        .compute_credit_score(&admin, &issuer, &low_quality_factors(&env))
-        .unwrap();
+    let score = client.compute_credit_score(&admin, &issuer, &low_quality_factors(&env));
     assert_eq!(score.tier, CreditTier::C);
 }
 
@@ -57,10 +53,8 @@ fn test_get_credit_score_returns_stored_value() {
     let (env, client, admin) = setup();
     let issuer = Address::generate(&env);
     let factors = high_quality_factors(&env);
-    let computed = client
-        .compute_credit_score(&admin, &issuer, &factors)
-        .unwrap();
-    let fetched = client.get_credit_score(&issuer).unwrap();
+    let computed = client.compute_credit_score(&admin, &issuer, &factors);
+    let fetched = client.get_credit_score(&issuer);
     assert_eq!(computed.score, fetched.score);
     assert_eq!(computed.tier, fetched.tier);
 }
@@ -71,20 +65,18 @@ fn test_unauthorised_caller_rejected() {
     let issuer = Address::generate(&env);
     let stranger = Address::generate(&env);
     assert_eq!(
-        client.compute_credit_score(&stranger, &issuer, &high_quality_factors(&env)),
+        client.try_compute_credit_score(&stranger, &issuer, &high_quality_factors(&env)),
         Err(Ok(Error::Unauthorized))
     );
 }
 
 #[test]
 fn test_authorised_contract_can_compute() {
-    let (env, client, admin) = setup();
+    let (env, client, _admin) = setup();
     let authorised = Address::generate(&env);
     let issuer = Address::generate(&env);
-    client.set_authorised_caller(&authorised, &true).unwrap();
-    let score = client
-        .compute_credit_score(&authorised, &issuer, &high_quality_factors(&env))
-        .unwrap();
+    client.set_authorised_caller(&authorised, &true);
+    let score = client.compute_credit_score(&authorised, &issuer, &high_quality_factors(&env));
     assert!(score.score > 0);
 }
 
@@ -99,9 +91,7 @@ fn test_score_factors_breakdown_accurate() {
         platform_tenure_days: 100,
     };
     // kyc=40, settlement=25, tenure=10, default_penalty=25 → 50
-    let score = client
-        .compute_credit_score(&admin, &issuer, &factors)
-        .unwrap();
+    let score = client.compute_credit_score(&admin, &issuer, &factors);
     assert_eq!(score.score, 50);
     assert_eq!(score.tier, CreditTier::B);
 }

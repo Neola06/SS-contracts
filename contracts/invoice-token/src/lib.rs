@@ -288,7 +288,7 @@ impl InvoiceToken {
         if from == spender {
             return Err(Error::InvalidAddress);
         }
-        if amount <= 0 {
+        if amount < 0 {
             return Err(Error::InvalidAmount);
         }
         let meta = storage::get_metadata(&env).ok_or(Error::NotInit)?;
@@ -1106,7 +1106,7 @@ mod consent_test {
         );
         client.set_transfer_locked(&admin, &false);
         client.set_direct_transfer_policy(&admin, &false);
-        client.mint(&minter, &alice, &1000i128);
+        client.mint(&alice, &1000i128, &minter);
 
         // Direct transfer_from is blocked when consent policy is enforced
         client.approve(&alice, &bob, &100i128, &100u32);

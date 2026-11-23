@@ -20,8 +20,8 @@ fn invoice_id(env: &Env, seed: u8) -> BytesN<32> {
 
 fn sample_input(_env: &Env, issuer: &Address) -> InvoiceMetadataInput {
     InvoiceMetadataInput {
-        face_value: 100_000_0000000,
-        yield_amount: 5_000_0000000,
+        face_value: 1_000_000_000_000,
+        yield_amount: 50_000_000_000,
         maturity_date: 1_900_000_000,
         issuer: issuer.clone(),
     }

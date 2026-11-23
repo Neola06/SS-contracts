@@ -7,13 +7,16 @@
 #![cfg(test)]
 #![allow(deprecated, unused_variables, dead_code, unused_mut, clippy::all)]
 
+extern crate std;
+
+use std::{println, vec};
+
 use super::*;
-use soroban_sdk::testutils::{Address as _, Events, Ledger};
-use soroban_sdk::{
-    contract, contractimpl, Address, BytesN, Env, IntoVal, Symbol, TryFromVal, Val, Vec,
-};
+use soroban_sdk::testutils::{Address as _, Ledger};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Symbol};
 
 use crate::errors::Error;
+use payment_distributor::PaymentDistributor;
 
 /// Mock invoice token for testing
 #[contract]
@@ -123,7 +126,7 @@ impl AuthTestEnv {
         let payment_token_admin = Address::generate(&env);
         let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
         let payment_token = payment_token_id.address();
-        let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token_id);
+        let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token);
         let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
         // Mint tokens
@@ -199,14 +202,10 @@ pub fn run_auth_matrix(
 
             if let Some(expected_error) = case.expected_error {
                 match result {
-                    Err(Ok(e)) => assert_eq!(
+                    Err(e) => assert_eq!(
                         e, expected_error,
                         "Wrong error for {} with role {:?}",
                         case.method, case.role
-                    ),
-                    Err(Err(e)) => panic!(
-                        "Host error for {} with role {:?}: {:?}",
-                        case.method, case.role, e
                     ),
                     Ok(_) => panic!(
                         "Expected error for {} with role {:?}",
@@ -359,7 +358,7 @@ fn auth_matrix_record_payment() {
     let payment_token_admin = Address::generate(env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&test_env.buyer, &1000);
@@ -463,7 +462,7 @@ fn auth_matrix_cancel_escrow() {
     let payment_token_admin = Address::generate(env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&test_env.debtor, &1000);
@@ -537,28 +536,31 @@ fn auth_matrix_admin_functions() {
 
     // set_payment_distributor - admin only
     let distributor_id = env.register_contract(None, PaymentDistributor);
-    let result = client.try_set_payment_distributor(&test_env.admin, &distributor_id);
+    let result = client.try_set_payment_distributor(&distributor_id);
     assert!(result.is_ok(), "Admin should be able to set distributor");
 
-    let result = client.try_set_payment_distributor(&test_env.seller, &distributor_id);
-    assert_eq!(
-        result,
-        Err(Ok(Error::Unauthorized)),
-        "Seller cannot set distributor"
+    env.set_auths(&[]);
+    let result = client.try_set_payment_distributor(&distributor_id);
+    assert!(
+        result.is_err(),
+        "Distributor update must require admin auth"
     );
+    env.mock_all_auths();
 
     // set_paused - admin only
-    let result = client.try_set_paused(&test_env.admin, &true);
+    let result = client.try_set_paused(&true);
     assert!(result.is_ok(), "Admin should be able to pause");
 
-    let result = client.try_set_paused(&test_env.seller, &true);
-    assert_eq!(result, Err(Ok(Error::Unauthorized)), "Seller cannot pause");
+    env.set_auths(&[]);
+    let result = client.try_set_paused(&true);
+    assert!(result.is_err(), "Pausing must require admin auth");
+    env.mock_all_auths();
 
     // set_grace_period - admin only
-    let result = client.try_set_grace_period(&test_env.admin, &test_env.admin, &100);
+    let result = client.try_set_grace_period(&test_env.admin, &100);
     assert!(result.is_ok(), "Admin should be able to set grace period");
 
-    let result = client.try_set_grace_period(&test_env.admin, &test_env.seller, &100);
+    let result = client.try_set_grace_period(&test_env.seller, &100);
     assert_eq!(
         result,
         Err(Ok(Error::Unauthorized)),
@@ -568,14 +570,12 @@ fn auth_matrix_admin_functions() {
     // set_category_fee - admin only
     let result = client.try_set_category_fee(
         &test_env.admin,
-        &test_env.admin,
         &crate::types::InvoiceCategory::Standard,
         &100,
     );
     assert!(result.is_ok(), "Admin should be able to set category fee");
 
     let result = client.try_set_category_fee(
-        &test_env.admin,
         &test_env.seller,
         &crate::types::InvoiceCategory::Standard,
         &100,
@@ -587,10 +587,10 @@ fn auth_matrix_admin_functions() {
     );
 
     // set_settlement_fee - admin only
-    let result = client.try_set_settlement_fee(&test_env.admin, &test_env.admin, &100);
+    let result = client.try_set_settlement_fee(&test_env.admin, &100);
     assert!(result.is_ok(), "Admin should be able to set settlement fee");
 
-    let result = client.try_set_settlement_fee(&test_env.admin, &test_env.seller, &100);
+    let result = client.try_set_settlement_fee(&test_env.seller, &100);
     assert_eq!(
         result,
         Err(Ok(Error::Unauthorized)),
@@ -598,10 +598,10 @@ fn auth_matrix_admin_functions() {
     );
 
     // set_min_investment - admin only
-    let result = client.try_set_min_investment(&test_env.admin, &test_env.admin, &100);
+    let result = client.try_set_min_investment(&test_env.admin, &100);
     assert!(result.is_ok(), "Admin should be able to set min investment");
 
-    let result = client.try_set_min_investment(&test_env.admin, &test_env.seller, &100);
+    let result = client.try_set_min_investment(&test_env.seller, &100);
     assert_eq!(
         result,
         Err(Ok(Error::Unauthorized)),
@@ -609,10 +609,10 @@ fn auth_matrix_admin_functions() {
     );
 
     // set_whitelist_enabled - admin only
-    let result = client.try_set_whitelist_enabled(&test_env.admin, &test_env.admin, &true);
+    let result = client.try_set_whitelist_enabled(&test_env.admin, &true);
     assert!(result.is_ok(), "Admin should be able to set whitelist");
 
-    let result = client.try_set_whitelist_enabled(&test_env.admin, &test_env.seller, &true);
+    let result = client.try_set_whitelist_enabled(&test_env.seller, &true);
     assert_eq!(
         result,
         Err(Ok(Error::Unauthorized)),
@@ -621,15 +621,10 @@ fn auth_matrix_admin_functions() {
 
     // set_accreditation_callback - admin only
     let callback_id = env.register_contract(None, MockInvoiceToken);
-    let result =
-        client.try_set_accreditation_callback(&test_env.admin, &test_env.admin, &Some(callback_id));
+    let result = client.try_set_accreditation_callback(&test_env.admin, &Some(callback_id.clone()));
     assert!(result.is_ok(), "Admin should be able to set callback");
 
-    let result = client.try_set_accreditation_callback(
-        &test_env.admin,
-        &test_env.seller,
-        &Some(callback_id),
-    );
+    let result = client.try_set_accreditation_callback(&test_env.seller, &Some(callback_id));
     assert_eq!(
         result,
         Err(Ok(Error::Unauthorized)),
@@ -637,13 +632,13 @@ fn auth_matrix_admin_functions() {
     );
 
     // set_penalty_interest_bps - admin only
-    let result = client.try_set_penalty_interest_bps(&test_env.admin, &test_env.admin, &100);
+    let result = client.try_set_penalty_interest_bps(&test_env.admin, &100);
     assert!(
         result.is_ok(),
         "Admin should be able to set penalty interest"
     );
 
-    let result = client.try_set_penalty_interest_bps(&test_env.admin, &test_env.seller, &100);
+    let result = client.try_set_penalty_interest_bps(&test_env.seller, &100);
     assert_eq!(
         result,
         Err(Ok(Error::Unauthorized)),
@@ -651,12 +646,10 @@ fn auth_matrix_admin_functions() {
     );
 
     // set_buyer_whitelisted - admin only
-    let result =
-        client.try_set_buyer_whitelisted(&test_env.admin, &test_env.admin, &test_env.buyer, &true);
+    let result = client.try_set_buyer_whitelisted(&test_env.admin, &test_env.buyer, &true);
     assert!(result.is_ok(), "Admin should be able to whitelist buyer");
 
-    let result =
-        client.try_set_buyer_whitelisted(&test_env.admin, &test_env.seller, &test_env.buyer, &true);
+    let result = client.try_set_buyer_whitelisted(&test_env.seller, &test_env.buyer, &true);
     assert_eq!(
         result,
         Err(Ok(Error::Unauthorized)),
@@ -666,26 +659,21 @@ fn auth_matrix_admin_functions() {
     // Zero address checks for admin functions
     let zero = zero_address(env);
 
-    let result = client.try_set_payment_distributor(&test_env.admin, &zero);
+    let result = client.try_set_payment_distributor(&zero);
     assert_eq!(
         result,
         Err(Ok(Error::InvalidAddress)),
         "Zero address distributor rejected"
     );
 
-    let result = client.try_set_grace_period(&test_env.admin, &zero, &100);
+    let result = client.try_set_grace_period(&zero, &100);
     assert_eq!(
         result,
         Err(Ok(Error::Unauthorized)),
         "Zero address admin rejected"
     );
 
-    let result = client.try_set_category_fee(
-        &test_env.admin,
-        &zero,
-        &crate::types::InvoiceCategory::Standard,
-        &100,
-    );
+    let result = client.try_set_category_fee(&zero, &crate::types::InvoiceCategory::Standard, &100);
     assert_eq!(
         result,
         Err(Ok(Error::Unauthorized)),
@@ -704,7 +692,7 @@ fn auth_matrix_set_early_settlement() {
 
     // Seller should succeed
     let result =
-        client.try_set_early_settlement(&test_env.invoice_id, &test_env.seller, &100, &2_000_000);
+        client.try_set_early_settlement(&test_env.invoice_id, &test_env.seller, &100, &900_000);
     assert!(
         result.is_ok(),
         "Seller should be able to set early settlement"
@@ -715,7 +703,7 @@ fn auth_matrix_set_early_settlement() {
     let payment_token_admin = Address::generate(env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&test_env.buyer, &1000);
@@ -782,7 +770,7 @@ fn auth_matrix_set_installment_schedule() {
     let payment_token_admin = Address::generate(env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&test_env.debtor, &1000);
@@ -880,18 +868,34 @@ fn auth_rejected_calls_leave_state_unchanged() {
     test_env.fund_escrow();
 
     // Capture state before failed call
-    let escrow_before = capture_escrow_state(env, &test_env.invoice_id).unwrap();
-    let config_before = capture_config_state(env).unwrap();
-    let funder_amt_before = capture_funder_amount(env, &test_env.invoice_id, &test_env.buyer);
+    let escrow_before = env
+        .as_contract(&test_env.escrow_id, || {
+            capture_escrow_state(env, &test_env.invoice_id)
+        })
+        .unwrap();
+    let config_before = env
+        .as_contract(&test_env.escrow_id, || capture_config_state(env))
+        .unwrap();
+    let funder_amt_before = env.as_contract(&test_env.escrow_id, || {
+        capture_funder_amount(env, &test_env.invoice_id, &test_env.buyer)
+    });
 
     // Attempt record_payment with wrong payer (should fail)
     let result = client.try_record_payment(&test_env.invoice_id, &test_env.seller, &100);
     assert!(result.is_err());
 
     // Capture state after failed call
-    let escrow_after = capture_escrow_state(env, &test_env.invoice_id).unwrap();
-    let config_after = capture_config_state(env).unwrap();
-    let funder_amt_after = capture_funder_amount(env, &test_env.invoice_id, &test_env.buyer);
+    let escrow_after = env
+        .as_contract(&test_env.escrow_id, || {
+            capture_escrow_state(env, &test_env.invoice_id)
+        })
+        .unwrap();
+    let config_after = env
+        .as_contract(&test_env.escrow_id, || capture_config_state(env))
+        .unwrap();
+    let funder_amt_after = env.as_contract(&test_env.escrow_id, || {
+        capture_funder_amount(env, &test_env.invoice_id, &test_env.buyer)
+    });
 
     // Assert state unchanged
     assert_eq!(
@@ -908,10 +912,16 @@ fn auth_rejected_calls_leave_state_unchanged() {
     );
 
     // Test admin function rejection leaves state unchanged
-    let config_before2 = capture_config_state(env).unwrap();
-    let result = client.try_set_paused(&test_env.seller, &true);
+    let config_before2 = env
+        .as_contract(&test_env.escrow_id, || capture_config_state(env))
+        .unwrap();
+    env.mock_auths(&[]);
+    let result = client.try_set_paused(&true);
     assert!(result.is_err());
-    let config_after2 = capture_config_state(env).unwrap();
+    env.mock_all_auths();
+    let config_after2 = env
+        .as_contract(&test_env.escrow_id, || capture_config_state(env))
+        .unwrap();
     assert_eq!(
         config_before2, config_after2,
         "Config state changed after failed set_paused"
@@ -930,7 +940,7 @@ fn auth_zero_address_rejected_everywhere() {
     let payment_token_admin = Address::generate(env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&test_env.debtor, &1000);
@@ -1212,10 +1222,10 @@ fn auth_comprehensive_matrix() {
     ];
 
     // This test serves as documentation - actual validation is in individual tests above
-    for (method, roles) in matrix {
+    for (method, roles) in &matrix {
         println!("Method: {}", method);
         for (role, expected) in roles {
-            println!("  {}: {}", role, if expected { "✓" } else { "✗" });
+            println!("  {}: {}", role, if *expected { "✓" } else { "✗" });
         }
     }
 

@@ -165,16 +165,15 @@ mod tests {
     #[test]
     fn enforces_default_limit() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract = env.register(InvestmentLimit, ());
         let client = InvestmentLimitClient::new(&env, &contract);
         let investor = Address::generate(&env);
         let invoice_a = BytesN::from_array(&env, &[1; 32]);
-        let invoice_b = BytesN::from_array(&env, &[2; 32]);
-        client.invest(&investor, &invoice_a, &100);
-        client.invest(&investor, &invoice_b, &400);
-        assert_eq!(client.get_concentration(&investor, &invoice_a), 2_000);
-        assert!(!client
-            .check_concentration(&investor, &invoice_b, &1)
-            .unwrap());
+        assert_eq!(
+            client.try_invest(&investor, &invoice_a, &100),
+            Err(Ok(Error::ConcentrationLimitExceeded))
+        );
+        assert_eq!(client.get_concentration(&investor, &invoice_a), 0);
     }
 }

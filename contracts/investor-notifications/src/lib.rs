@@ -147,6 +147,7 @@ mod tests {
     #[test]
     fn only_authorized_callers_emit() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract = env.register(InvestorNotifications, ());
         let client = InvestorNotificationsClient::new(&env, &contract);
         let admin = Address::generate(&env);

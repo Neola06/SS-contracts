@@ -12,7 +12,7 @@ fn setup() -> (Env, OvercollateralRewardClient<'static>, Address) {
     let contract_id = env.register_contract(None, OvercollateralReward);
     let client = OvercollateralRewardClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
-    client.initialize(&admin).unwrap();
+    client.initialize(&admin);
     (env, client, admin)
 }
 
@@ -20,7 +20,7 @@ fn setup() -> (Env, OvercollateralRewardClient<'static>, Address) {
 fn test_check_overcollateral_no_record() {
     let (env, client, _admin) = setup();
     let issuer = Address::generate(&env);
-    let (is_over, excess, days) = client.check_overcollateral(&issuer).unwrap();
+    let (is_over, excess, days) = client.check_overcollateral(&issuer);
     assert!(!is_over);
     assert_eq!(excess, 0);
     assert_eq!(days, 0);
@@ -30,8 +30,8 @@ fn test_check_overcollateral_no_record() {
 fn test_record_and_check_overcollateral() {
     let (env, client, _admin) = setup();
     let issuer = Address::generate(&env);
-    client.record_collateral(&issuer, &1500, &1000).unwrap();
-    let (is_over, excess, _days) = client.check_overcollateral(&issuer).unwrap();
+    client.record_collateral(&issuer, &1500, &1000);
+    let (is_over, excess, _days) = client.check_overcollateral(&issuer);
     assert!(is_over);
     assert_eq!(excess, 500);
 }
@@ -40,9 +40,9 @@ fn test_record_and_check_overcollateral() {
 fn test_grant_discount_before_30_days_fails() {
     let (env, client, _admin) = setup();
     let issuer = Address::generate(&env);
-    client.record_collateral(&issuer, &1500, &1000).unwrap();
+    client.record_collateral(&issuer, &1500, &1000);
     assert_eq!(
-        client.grant_fee_discount(&issuer),
+        client.try_grant_fee_discount(&issuer),
         Err(Ok(Error::StreakTooShort))
     );
 }
@@ -51,11 +51,11 @@ fn test_grant_discount_before_30_days_fails() {
 fn test_grant_discount_after_30_days_succeeds() {
     let (env, client, _admin) = setup();
     let issuer = Address::generate(&env);
-    client.record_collateral(&issuer, &1500, &1000).unwrap();
+    client.record_collateral(&issuer, &1500, &1000);
     // Advance 31 days.
     env.ledger().with_mut(|l| l.timestamp += 31 * 86_400);
-    client.grant_fee_discount(&issuer).unwrap();
-    let status = client.get_collateral_reward_status(&issuer).unwrap();
+    client.grant_fee_discount(&issuer);
+    let status = client.get_collateral_reward_status(&issuer);
     assert!(status.discount_pending);
     assert_eq!(status.discount_bps, 1000);
 }
@@ -64,9 +64,9 @@ fn test_grant_discount_after_30_days_succeeds() {
 fn test_streak_broken_on_under_collateral() {
     let (env, client, _admin) = setup();
     let issuer = Address::generate(&env);
-    client.record_collateral(&issuer, &1500, &1000).unwrap();
-    client.record_collateral(&issuer, &500, &1000).unwrap();
-    let (is_over, excess, days) = client.check_overcollateral(&issuer).unwrap();
+    client.record_collateral(&issuer, &1500, &1000);
+    client.record_collateral(&issuer, &500, &1000);
+    let (is_over, excess, days) = client.check_overcollateral(&issuer);
     assert!(!is_over);
     assert_eq!(excess, 0);
     assert_eq!(days, 0);
@@ -76,11 +76,11 @@ fn test_streak_broken_on_under_collateral() {
 fn test_consume_discount() {
     let (env, client, _admin) = setup();
     let issuer = Address::generate(&env);
-    client.record_collateral(&issuer, &1500, &1000).unwrap();
+    client.record_collateral(&issuer, &1500, &1000);
     env.ledger().with_mut(|l| l.timestamp += 31 * 86_400);
-    client.grant_fee_discount(&issuer).unwrap();
-    let bps = client.consume_discount(&issuer).unwrap();
+    client.grant_fee_discount(&issuer);
+    let bps = client.consume_discount(&issuer);
     assert_eq!(bps, 1000);
     // Second consume returns 0.
-    assert_eq!(client.consume_discount(&issuer).unwrap(), 0);
+    assert_eq!(client.consume_discount(&issuer), 0);
 }

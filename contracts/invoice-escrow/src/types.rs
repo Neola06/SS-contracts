@@ -57,6 +57,12 @@ pub enum StorageKey {
     FxOracle,
     /// Instance: payment token for a supported investment currency.
     Currency(soroban_sdk::Symbol),
+    /// Instance: maximum accepted age for an FX quote in seconds.
+    CurrencyMaxAge(soroban_sdk::Symbol),
+    /// Instance: settlement-proposal expiry in ledgers.
+    SettleTtl,
+    /// Persistent: settlement-proposal expiry ledger by invoice id.
+    SettleExp(soroban_sdk::BytesN<32>),
     /// Persistent: multi-currency investment records by (invoice_id, investor).
     InvestRecords(soroban_sdk::BytesN<32>, soroban_sdk::Address),
     InvoiceCap(soroban_sdk::BytesN<32>),

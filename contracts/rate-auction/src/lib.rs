@@ -225,7 +225,6 @@ impl RateAuction {
         // Pull tokens from the investor.
         let token_client = token::Client::new(&env, &auction.token);
         token_client.transfer(&investor, env.current_contract_address(), &actual_amount);
-        token_client.transfer(&investor, &env.current_contract_address(), &actual_amount);
 
         // Record the commitment.
         let mut commitments = storage::get_commitments(&env, &invoice_id);

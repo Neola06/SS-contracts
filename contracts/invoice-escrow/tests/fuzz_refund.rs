@@ -21,9 +21,9 @@ fn compute_pro_rata_refund(funded_amt: i128, funder_amt: i128, amount_to_refund:
         .saturating_div(funded_amt)
 }
 
-/// Property: for any non-negative funding amounts that sum to `total_funded`,
-/// and any refund amount `R <= total_funded`, the sum of per-investor pro-rata
-/// refunds never exceeds `R`.
+// Property: for any non-negative funding amounts that sum to `total_funded`,
+// and any refund amount `R <= total_funded`, the sum of per-investor pro-rata
+// refunds never exceeds `R`.
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(500))]
 

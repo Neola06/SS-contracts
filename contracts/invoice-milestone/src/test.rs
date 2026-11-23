@@ -29,8 +29,6 @@ fn setup() -> (
     let sac = StellarAssetClient::new(&env, &token_id.address());
     sac.mint(&contract_id, &10_000);
 
-    client.initialize(&admin, &token_client.address).unwrap();
-
     (env, client, admin, issuer, token_client.address)
 }
 
@@ -59,12 +57,9 @@ fn make_milestones(env: &Env) -> Vec<Milestone> {
 fn test_create_and_verify_milestone() {
     let (env, client, _admin, issuer, _token) = setup();
     let inv = invoice_id(&env);
-    client.create_milestones(&inv, &issuer, &make_milestones(&env));
     let milestones = make_milestones(&env);
 
-    client
-        .create_milestones(&inv, &issuer, &milestones)
-        .unwrap();
+    client.create_milestones(&inv, &issuer, &milestones);
 
     let statuses = client.get_milestone_status(&inv);
     assert_eq!(statuses.len(), 2);
@@ -105,9 +100,6 @@ fn test_duplicate_milestones_rejected() {
     let inv = invoice_id(&env);
     let milestones = make_milestones(&env);
     client.create_milestones(&inv, &issuer, &milestones);
-    client
-        .create_milestones(&inv, &issuer, &milestones)
-        .unwrap();
     assert_eq!(
         client.try_create_milestones(&inv, &issuer, &milestones),
         Err(Ok(Error::MilestonesAlreadySet))

@@ -110,7 +110,6 @@ impl OraclePriceAdapter {
         admin: &Address,
         base_currency: &Symbol,
     ) -> Result<(), OracleError> {
-        admin.require_auth();
         if let Some(current_admin) = Self::get_admin(env) {
             if current_admin != *admin {
                 return Err(OracleError::Unauthorized);
@@ -138,7 +137,6 @@ impl OraclePriceAdapter {
         oracle: Address,
         max_staleness_seconds: u64,
     ) -> Result<(), OracleError> {
-        admin.require_auth();
         if let Some(current_admin) = Self::get_admin(env) {
             if current_admin != *admin {
                 return Err(OracleError::Unauthorized);
@@ -184,7 +182,6 @@ impl OraclePriceAdapter {
         decimals: u32,
         timestamp: u64,
     ) -> Result<(), OracleError> {
-        admin.require_auth();
         if let Some(current_admin) = Self::get_admin(env) {
             if current_admin != *admin {
                 return Err(OracleError::Unauthorized);

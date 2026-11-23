@@ -70,13 +70,12 @@ impl SecondaryCooldown {
             .unwrap_or(0);
 
         if period > 0 {
-            let last_buy: u64 = env
+            let last_buy: Option<u64> = env
                 .storage()
                 .persistent()
-                .get(&StorageKey::LastBuy(buyer.clone(), invoice_id.clone()))
-                .unwrap_or(0);
+                .get(&StorageKey::LastBuy(buyer.clone(), invoice_id.clone()));
 
-            if last_buy > 0 {
+            if let Some(last_buy) = last_buy {
                 let elapsed = now.saturating_sub(last_buy);
                 if elapsed < period {
                     let seconds_remaining = period - elapsed;
@@ -113,16 +112,14 @@ impl SecondaryCooldown {
             return 0;
         }
 
-        let last_buy: u64 = env
+        let last_buy: Option<u64> = env
             .storage()
             .persistent()
-            .get(&StorageKey::LastBuy(wallet, invoice_id))
-            .unwrap_or(0);
+            .get(&StorageKey::LastBuy(wallet, invoice_id));
 
-        if last_buy == 0 {
+        let Some(last_buy) = last_buy else {
             return 0;
-        }
-
+        };
         let elapsed = now.saturating_sub(last_buy);
         period.saturating_sub(elapsed)
     }

@@ -100,6 +100,7 @@ mod tests {
     #[test]
     fn admin_updates_invoice_rate() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract = env.register(InterestRateOracle, ());
         let client = InterestRateOracleClient::new(&env, &contract);
         let admin = Address::generate(&env);

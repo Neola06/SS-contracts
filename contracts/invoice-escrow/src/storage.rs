@@ -16,16 +16,20 @@ pub const MIN_TTL_EXTEND: u32 = 1_036_800;
 
 /// Extend the TTL of any persistent storage entry to at least 60 days in ledger units.
 pub fn bump_persistent(env: &Env, key: &StorageKey) {
-    env.storage()
-        .persistent()
-        .extend_ttl(key, TTL_THRESHOLD, MIN_TTL_EXTEND);
+    if env.storage().persistent().has(key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, TTL_THRESHOLD, MIN_TTL_EXTEND);
+    }
 }
 
 /// Load contract config from instance storage, bumping instance TTL.
 pub fn get_config(env: &Env) -> Option<Config> {
-    env.storage()
-        .instance()
-        .extend_ttl(TTL_THRESHOLD, MIN_TTL_EXTEND);
+    if env.storage().instance().has(&StorageKey::Config) {
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, MIN_TTL_EXTEND);
+    }
     env.storage().instance().get(&StorageKey::Config)
 }
 
@@ -166,9 +170,11 @@ pub fn has_invoice(env: &soroban_sdk::Env, invoice_id: BytesN<32>) -> bool {
 
 /// Load the emergency multi-sig admin configuration.
 pub fn get_emergency_config(env: &Env) -> Option<MultiSigConfig> {
-    env.storage()
-        .instance()
-        .extend_ttl(TTL_THRESHOLD, MIN_TTL_EXTEND);
+    if env.storage().instance().has(&StorageKey::EmergencyConfig) {
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, MIN_TTL_EXTEND);
+    }
     env.storage().instance().get(&StorageKey::EmergencyConfig)
 }
 

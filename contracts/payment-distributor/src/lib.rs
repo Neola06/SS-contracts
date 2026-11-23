@@ -561,6 +561,12 @@ impl PaymentDistributor {
         storage::get_admin(&env).ok_or(Error::NotInit)?;
         escrow_contract.require_auth();
 
+        if let Some(whitelisted) = storage::get_escrow_contract(&env) {
+            if whitelisted != escrow_contract {
+                return Err(Error::UnauthorizedEscrow);
+            }
+        }
+
         if escrow_status != ESCROW_STATUS_REFUNDED {
             return Err(Error::InvalidEscrowStatus);
         }

@@ -35,11 +35,12 @@ pub fn get_balance(env: &soroban_sdk::Env, addr: &Address) -> i128 {
     let key = StorageKey::Balance(addr.clone());
     let balance = env.storage().persistent().get(&key).unwrap_or(0);
 
-    // Extend TTL to prevent key expiration during active use
-    let current_ledger = env.ledger().sequence();
-    env.storage()
-        .persistent()
-        .extend_ttl(&key, current_ledger + 1_000, current_ledger + 1_000);
+    if env.storage().persistent().has(&key) {
+        let current_ledger = env.ledger().sequence();
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, current_ledger + 1_000, current_ledger + 1_000);
+    }
 
     balance
 }

@@ -5,8 +5,8 @@ use soroban_sdk::testutils::{Address as _, Events as _, Ledger as _, MockAuth, M
 use soroban_sdk::xdr::{ContractEvent, ContractEventBody, ScVal};
 use soroban_sdk::{Address, Env, IntoVal, Symbol, TryFromVal, Val, Vec};
 
-const START: u64 = 1_000;
 const ONE_DAY: u64 = 86_400;
+const START: u64 = 3 * ONE_DAY;
 
 /// Deployed contract, its actors and the tracked invoice.
 struct Ctx<'a> {

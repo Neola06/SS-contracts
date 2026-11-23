@@ -27,7 +27,7 @@ impl<'a> Ctx<'a> {
 
     /// Grant a hardship extension to the tracked invoice.
     fn grant(&self, days: u32, text: &str) -> u32 {
-        let reason = String::from_str(&self.env(), text);
+        let reason = String::from_str(self.env(), text);
         self.client
             .grant_hardship_extension(&self.invoice_id, &days, &reason)
     }
@@ -181,7 +181,7 @@ fn granting_an_extension_is_restricted_to_the_admin() {
     let invoke = MockAuthInvoke {
         contract: &ctx.contract_id,
         fn_name: "grant_hardship_extension",
-        args: (ctx.invoice_id.clone(), 10u32, reason).into_val(&env),
+        args: (ctx.invoice_id.clone(), 10u32, reason.clone()).into_val(&env),
         sub_invokes: &[],
     };
     let auth = MockAuth {
@@ -217,11 +217,11 @@ fn the_granted_days_count_towards_the_maximum() {
 
     assert_eq!(ctx.grant(20, "first hardship"), 20);
 
-    // Ten more days would exceed the maximum of thirty days.
+    // Eleven more days would exceed the maximum of thirty days.
     let text = reason(&env);
     let result = ctx
         .client
-        .try_grant_hardship_extension(&ctx.invoice_id, &10, &text);
+        .try_grant_hardship_extension(&ctx.invoice_id, &11, &text);
     assert_eq!(result, Err(Ok(Error::MaxExtensionExceeded)));
 
     // The extension that was granted before is untouched.

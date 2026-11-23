@@ -36,6 +36,13 @@ pub fn escrow_status_changed(env: &Env, inv_id: Symbol, status: EscrowStatus, ti
     );
 }
 
+pub fn currency_max_age_set(env: &Env, currency: &Symbol, max_age_secs: u64) {
+    env.events().publish(
+        (Symbol::new(env, "currency_max_age_set"), currency.clone()),
+        max_age_secs,
+    );
+}
+
 pub fn escrow_created(
     env: &Env,
     inv_id: Symbol,

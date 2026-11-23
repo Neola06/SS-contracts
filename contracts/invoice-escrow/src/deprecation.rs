@@ -103,12 +103,9 @@ pub fn all_deprecation_records(env: &Env) -> Vec<DeprecationRecord> {
 
 /// Checks if an entrypoint is deprecated and returns its record if so.
 pub fn get_deprecation_record(env: &Env, method: &Symbol) -> Option<DeprecationRecord> {
-    for record in all_deprecation_records(env).iter() {
-        if &record.method == method {
-            return Some(record);
-        }
-    }
-    None
+    all_deprecation_records(env)
+        .iter()
+        .find(|record| &record.method == method)
 }
 
 /// Returns true if the given method is deprecated.

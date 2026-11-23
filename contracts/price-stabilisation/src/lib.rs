@@ -136,10 +136,6 @@ impl PriceStabilisationContract {
                 && obs.price > baseline_price
             {
                 baseline_price = obs.price;
-            {
-                if obs.price > baseline_price {
-                    baseline_price = obs.price;
-                }
             }
         }
 
