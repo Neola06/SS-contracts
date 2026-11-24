@@ -104,31 +104,43 @@ fn ensure_not_paused(config: &Config) -> Result<(), Error> {
     Ok(())
 }
 
-/// Calculate early repayment yield rebate for investors when invoice is paid before due date.
-/// Rebate is proportional to the time remaining until maturity: fewer days means higher rebate.
-/// Returns the rebate amount to deduct from investor distribution.
+/// Calculate the early-repayment yield rebate: the unearned yield waived when an
+/// invoice is repaid before maturity.
+///
+/// The rebate only ever touches the *yield* component (`face_value` minus
+/// `principal`); contractual principal is never waived. It is proportional to
+/// the time remaining until maturity, so repayment at or after maturity yields
+/// a zero rebate. All divisions round down (floor); any residual stays on the
+/// yield side and is never subtracted from principal.
+///
+/// Returns the amount to deduct from the investor yield payout. The waived
+/// interest is the debtor's benefit: repaying early means the debtor no longer
+/// owes the unearned yield, and the caller is expected to credit/return it to
+/// the debtor as the explicit beneficiary.
 fn calculate_early_repayment_rebate(
     current_ts: u64,
     due_dt: u64,
     funded_dt: u64,
-    investor_amount: i128,
+    principal: i128,
+    yield_amount: i128,
 ) -> i128 {
+    let _ = principal; // contractually protected; only yield is ever rebated.
+    if yield_amount <= 0 {
+        return 0;
+    }
     if current_ts >= due_dt || funded_dt == 0 {
         return 0;
     }
-    let total_loan_period = due_dt.saturating_sub(funded_dt);
-    if total_loan_period == 0 {
+    let total_term = due_dt.saturating_sub(funded_dt);
+    if total_term == 0 {
         return 0;
     }
-    let days_remaining = due_dt.saturating_sub(current_ts);
-    let rebate_bps = days_remaining
-        .saturating_mul(10_000)
-        .checked_div(total_loan_period)
-        .unwrap_or(0) as i128;
-    investor_amount
-        .checked_mul(rebate_bps)
+    let time_remaining = due_dt.saturating_sub(current_ts);
+    // Unearned yield = yield * time_remaining / total_term (round down).
+    yield_amount
+        .checked_mul(time_remaining as i128)
         .unwrap_or(0)
-        .checked_div(10_000)
+        .checked_div(total_term as i128)
         .unwrap_or(0)
 }
 
@@ -1231,23 +1243,38 @@ impl InvoiceEscrow {
             // 2. Platform fee + penalty interest to admin
             collateral::transfer(&env, &token, &config.admin, &total_fee)?;
 
-            // 3. Pro-rata investor distribution with early repayment yield rebate
+            // 3. Pro-rata investor distribution with early repayment yield rebate.
+            // Only unearned yield may be waived; the rebate never touches the
+            // investors' contractual principal. The waived interest is the
+            // debtor's benefit (early repayment means less yield owed) and is
+            // returned to the debtor so it never sits as an unexplained balance.
             if let Some(funder) = &data.funder {
-                // The investor side uses the penalty-adjusted amount. The penalty already
-                // went to the treasury above, so using the pre-penalty figure here would
-                // pay out the penalty a second time.
                 if data.funded_amt > 0 && final_investor_amount > 0 {
                     let funder_amt = storage::get_funder_amount(&env, invoice_id.clone(), funder);
+                    let principal = data.purchase_price;
+                    let total_yield = data.face_value.saturating_sub(data.purchase_price);
                     let rebate = calculate_early_repayment_rebate(
                         current_ts,
                         data.due_dt,
                         data.funded_dt,
-                        final_investor_amount,
+                        principal,
+                        total_yield,
                     );
+                    // Yield share of this investor payout (round down); the rebate
+                    // may not exceed it, so principal is always protected.
+                    let yield_portion = if total_yield > 0 && data.face_value > 0 {
+                        final_investor_amount
+                            .checked_mul(total_yield)
+                            .ok_or(Error::Overflow)?
+                            .checked_div(data.face_value)
+                            .ok_or(Error::Overflow)?
+                    } else {
+                        0
+                    };
+                    let rebate = rebate.min(yield_portion);
                     let net_investor_amount = final_investor_amount
                         .checked_sub(rebate)
-                        .ok_or(Error::Overflow)?
-                        .max(0);
+                        .ok_or(Error::Overflow)?;
                     let pro_rata_share = net_investor_amount
                         .checked_mul(funder_amt)
                         .ok_or(Error::Overflow)?
@@ -1255,6 +1282,11 @@ impl InvoiceEscrow {
                         .ok_or(Error::Overflow)?;
                     if pro_rata_share > 0 {
                         collateral::transfer(&env, &token, funder, &pro_rata_share)?;
+                    }
+                    // Return the waived (unearned) yield to the debtor: the explicit
+                    // beneficiary of the early-repayment rebate.
+                    if rebate > 0 {
+                        collateral::transfer(&env, &token, &data.debtor, &rebate)?;
                     }
                 }
             }
@@ -1297,7 +1329,7 @@ impl InvoiceEscrow {
     }
 
     /// Refund the investors if the invoice was not paid by due date. Anyone may call.
-    /// Refunds are distributed pro-rata based on each investor's contribution.
+    /// Refunds are distributed pro-rata based on each investor's recorded contribution.
     pub fn refund_escrow(env: Env, invoice_id: Symbol) -> Result<(), Error> {
         let config = storage::get_config(&env).ok_or(Error::NotInit)?;
         ensure_not_paused(&config)?;
@@ -1329,15 +1361,33 @@ impl InvoiceEscrow {
         let token = token::Client::new(&env, &data.token);
         let contract = env.current_contract_address();
 
-        // Extract funder address before status mutation so it is available in both paths.
-        let funder_opt = data.funder.clone();
+        // Build the refund recipient list and per-funder weights from the actual
+        // contribution records (data.funders) so every investor is covered.
+        let mut funder_addrs: Vec<Address> = soroban_sdk::vec![&env];
+        let mut funder_weights: Vec<i128> = soroban_sdk::vec![&env];
+        let mut total_weight: i128 = 0;
+        for funder in data.funders.iter() {
+            let funder_amt = storage::get_funder_amount(&env, invoice_id.clone(), &funder);
+            if funder_amt > 0 {
+                funder_addrs.push_back(funder.clone());
+                funder_weights.push_back(funder_amt);
+                total_weight = total_weight.checked_add(funder_amt).ok_or(Error::Overflow)?;
+            }
+        }
 
         data.status = EscrowStatus::Refunded;
-        storage::set_escrow(&env, invoice_id.clone(), &data);
 
-        if amount_to_refund > 0 {
+        if amount_to_refund > 0 && !funder_addrs.is_empty() {
             if let Some(distributor) = config.payment_distributor.as_ref() {
                 collateral::transfer(&env, &token, distributor, &amount_to_refund)?;
+                let mut addresses: Vec<Address> = soroban_sdk::vec![&env, data.token.clone()];
+                let mut amounts: Vec<i128> = soroban_sdk::vec![&env, amount_to_refund];
+                for i in 0..funder_addrs.len() {
+                    addresses
+                        .push_back(funder_addrs.get(i).ok_or(Error::InvalidAmount)?);
+                    amounts
+                        .push_back(funder_weights.get(i).ok_or(Error::InvalidAmount)?);
+                }
                 env.invoke_contract::<()>(
                     distributor,
                     &Symbol::new(&env, DISTRIBUTE_REFUND_FN),
@@ -1345,40 +1395,41 @@ impl InvoiceEscrow {
                         &env,
                         contract.to_val(),
                         invoice_id.clone().into_val(&env),
-                        soroban_sdk::vec![
-                            &env,
-                            <Address as IntoVal<Env, soroban_sdk::Val>>::into_val(
-                                &data.token,
-                                &env
-                            ),
-                            <Option<Address> as IntoVal<Env, soroban_sdk::Val>>::into_val(
-                                &funder_opt,
-                                &env,
-                            )
-                        ]
-                        .into_val(&env),
-                        soroban_sdk::vec![&env, amount_to_refund].into_val(&env),
-                        (data.status as u32).into_val(&env)
+                        addresses.into_val(&env),
+                        amounts.into_val(&env),
+                        (EscrowStatus::Refunded as u32).into_val(&env),
                     ],
                 );
             } else {
-                // Pro-rata refund to funders
-                if let Some(funder) = &funder_opt {
-                    if data.funded_amt > 0 {
-                        let funder_amt =
-                            storage::get_funder_amount(&env, invoice_id.clone(), funder);
-                        let pro_rata_refund = amount_to_refund
-                            .checked_mul(funder_amt)
+                // Direct pro-rata refund to every recorded funder. The residual
+                // from integer division is assigned deterministically to the
+                // last funder so the total paid out equals the refund pool.
+                let mut allocated: i128 = 0;
+                let last = funder_addrs.len().saturating_sub(1);
+                for (i, funder) in funder_addrs.iter().enumerate() {
+                    let share = if i == last {
+                        amount_to_refund
+                            .checked_sub(allocated)
                             .ok_or(Error::Overflow)?
-                            .checked_div(data.funded_amt)
-                            .ok_or(Error::Overflow)?;
-                        if pro_rata_refund > 0 {
-                            collateral::transfer(&env, &token, funder, &pro_rata_refund)?;
-                        }
+                    } else {
+                        let weight = funder_weights.get(i).ok_or(Error::InvalidAmount)?;
+                        amount_to_refund
+                            .checked_mul(*weight)
+                            .ok_or(Error::Overflow)?
+                            .checked_div(total_weight)
+                            .ok_or(Error::Overflow)?
+                    };
+                    if share > 0 {
+                        collateral::transfer(&env, &token, funder, &share)?;
                     }
+                    allocated = allocated.checked_add(share).ok_or(Error::Overflow)?;
                 }
             }
         }
+
+        // Persist the terminal status only after a successful payout so a
+        // transfer failure leaves the escrow (status, balances, contributions) intact.
+        storage::set_escrow(&env, invoice_id.clone(), &data);
 
         // Unlock invoice token transfers now that the invoice is refunded
         env.invoke_contract::<()>(
@@ -1996,6 +2047,7 @@ impl InvoiceEscrow {
             total_raised: 0,
             status: EscrowStatus::Created,
             investors: soroban_sdk::Vec::new(&env),
+            payment_token: None,
             document_hash,
         };
 
@@ -2012,6 +2064,33 @@ impl InvoiceEscrow {
             yield_bps,
             deadline_ledger,
         );
+        Ok(())
+    }
+
+    /// Bind (or re-bind) the payment asset that backs credited positions on a
+    /// registered invoice. Admin-only. A registered invoice is accounting-only
+    /// until a payment token is bound; once bound, investment debits and
+    /// refund/settlement payouts move the configured asset.
+    pub fn set_invoice_payment_token(
+        env: Env,
+        admin: Address,
+        invoice_id: BytesN<32>,
+        token: Address,
+    ) -> Result<(), Error> {
+        admin.require_auth();
+        let config = storage::get_config(&env).ok_or(Error::NotInit)?;
+        if config.admin != admin {
+            return Err(Error::Unauthorized);
+        }
+        ensure_non_zero_address(&env, &token)?;
+        let mut record =
+            storage::get_invoice_record(&env, &invoice_id).ok_or(Error::EscrowNotFound)?;
+        if record.status != EscrowStatus::Created {
+            return Err(Error::InvalidInvoiceStatus);
+        }
+        record.payment_token = Some(token.clone());
+        storage::set_invoice_record(&env, &invoice_id, &record);
+        events::invoice_payment_token_bound(&env, &invoice_id, &token);
         Ok(())
     }
 
@@ -2283,8 +2362,26 @@ impl InvoiceEscrow {
                 }
             }
             investor_cap::check_admission(&env, &invoice_id, &investor)?;
-            let token_client = token::Client::new(&env, &invoice.token);
-            token_client.transfer(&investor, env.current_contract_address(), &accepted);
+            // Consume the foreign-currency transfer override: debit the configured
+            // source asset, charging only the source-token units that correspond
+            // to the accepted base units so partial fills leave unused units with
+            // the investor. Without an override, debit the invoice's base token.
+            let (transfer_token, transfer_amount) = match &foreign {
+                Some((token, source_amount)) => {
+                    let charged = accepted
+                        .checked_mul(*source_amount)
+                        .ok_or(Error::Overflow)?
+                        .checked_div(amount)
+                        .ok_or(Error::Overflow)?;
+                    if charged <= 0 {
+                        return Err(Error::InvalidAmount);
+                    }
+                    (token.clone(), charged)
+                }
+                None => (invoice.token.clone(), accepted),
+            };
+            token::Client::new(&env, &transfer_token)
+                .transfer(&investor, env.current_contract_address(), &transfer_amount);
             // Only accepted funds are pulled. The unspent remainder must not
             // be paid out of other investors' principal or issuer collateral.
             storage::set_investor_position(&env, &invoice_id, &investor, new_pos);
@@ -2347,6 +2444,15 @@ impl InvoiceEscrow {
                 investor_count.checked_add(1).ok_or(Error::Overflow)?,
             );
             record.investors.push_back(investor.clone());
+        }
+
+        // Token-backed path: debit the bound payment asset from the investor
+        // before crediting the position, so a credited position always has a
+        // matching authorized payment-token debit. Accounting-only invoices
+        // (payment_token == None) skip the debit.
+        if let Some(payment_token) = &record.payment_token {
+            token::Client::new(&env, payment_token)
+                .transfer(&investor, env.current_contract_address(), &accepted);
         }
 
         let current_pos = storage::get_investor_position(&env, &invoice_id, &investor);
@@ -2588,6 +2694,13 @@ impl InvoiceEscrow {
             return Err(Error::NoPositionFound);
         }
 
+        // Credit the investor with the bound payment asset before mutating
+        // records so a failed transfer leaves positions and totals unchanged.
+        if let Some(payment_token) = &record.payment_token {
+            token::Client::new(&env, payment_token)
+                .transfer(&env.current_contract_address(), &investor, &committed);
+        }
+
         storage::remove_investor_position(&env, &invoice_id, &investor);
 
         record.total_raised = record
@@ -2822,7 +2935,14 @@ impl InvoiceEscrow {
                     .ok_or(Error::Overflow)?;
                 let yield_earned = payout.saturating_sub(committed);
                 total_payouts = total_payouts.checked_add(payout).ok_or(Error::Overflow)?;
-                events::settlement_paid(env, &investor, invoice_id, payout, yield_earned);
+                // Pay out the bound payment asset first; only emit the cash
+                // settlement event after the transfer succeeds. Accounting-only
+                // invoices (no payment token) settle without a cash payout.
+                if let Some(payment_token) = &record.payment_token {
+                    token::Client::new(&env, payment_token)
+                        .transfer(&env.current_contract_address(), &investor, &payout);
+                    events::settlement_paid(env, &investor, invoice_id, payout, yield_earned);
+                }
             }
         }
         let _dust = repayment_amount

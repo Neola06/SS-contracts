@@ -134,6 +134,8 @@ pub struct InvoiceData {
     pub status: EscrowStatus,
     /// List of investor addresses.
     pub investors: soroban_sdk::Vec<soroban_sdk::Address>,
+    /// Payment asset used to back credited positions (None = accounting-only).
+    pub payment_token: Option<soroban_sdk::Address>,
     /// Off-chain invoice document SHA256 hash for verification.
     pub document_hash: soroban_sdk::BytesN<32>,
 }

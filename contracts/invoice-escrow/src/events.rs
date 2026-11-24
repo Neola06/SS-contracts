@@ -303,6 +303,20 @@ pub fn deadline_extended(
         (invoice_id.clone(), old_deadline_ledger, new_deadline_ledger),
     );
 }
+
+/// Publish invoice_payment_token_bound event when a payment asset is bound to
+/// a registered invoice.
+pub fn invoice_payment_token_bound(
+    env: &Env,
+    invoice_id: &soroban_sdk::BytesN<32>,
+    token: &Address,
+) {
+    env.events().publish(
+        (Symbol::new(env, "invoice_payment_token_bound"),),
+        (invoice_id.clone(), token.clone()),
+    );
+}
+
 /// Publish investment_refunded event.
 pub fn investment_refunded(
     env: &Env,
