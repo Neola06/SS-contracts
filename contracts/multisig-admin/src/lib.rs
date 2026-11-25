@@ -99,8 +99,8 @@ impl MultisigAdmin {
 
         // Replay protection: verify and consume the proposer's nonce.
         let expected_nonce = get_proposer_nonce(&env, &proposer);
-        let one = U256::from_u32(1);
-        let next_nonce = expected_nonce.checked_add(one).ok_or(Error::Overflow)?;
+        let one = U256::from_u32(&env, 1);
+        let next_nonce = expected_nonce.checked_add(&one).ok_or(Error::Overflow)?;
 
         if nonce < expected_nonce {
             return Err(Error::NonceStale);
@@ -128,7 +128,7 @@ impl MultisigAdmin {
         let proposal = Proposal {
             id: proposal_id,
             proposer: proposer.clone(),
-            nonce,
+            nonce: nonce.clone(),
             action_type,
             params,
             approvals,

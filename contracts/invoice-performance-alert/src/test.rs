@@ -550,8 +550,8 @@ fn risk_status_reports_the_current_flags_and_the_latest_alert() {
     let status = ctx.client.get_risk_status(&ctx.invoice_id);
     assert!(status.underfunded);
     assert_eq!(status.last_alert_at, START);
-    assert_eq!(status.last_alert_type, Some(RiskType::Underfunded));
-    assert_eq!(status.last_severity, Some(Severity::Low));
+    assert_eq!(status.last_alert_type, Some(RiskType::Underfunded as u32));
+    assert_eq!(status.last_severity, Some(Severity::Low as u32));
 
     let risk = RiskType::Underfunded;
     let record = ctx.client.get_last_alert(&ctx.invoice_id, &risk);

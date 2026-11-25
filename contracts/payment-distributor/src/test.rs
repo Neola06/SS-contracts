@@ -17,6 +17,22 @@ fn test_commitment(env: &Env) -> BytesN<32> {
     BytesN::from_array(env, &[0; 32])
 }
 
+fn sdk_i128_vec(env: &Env, values: &[i128]) -> soroban_sdk::Vec<i128> {
+    let mut result = soroban_sdk::Vec::new(env);
+    for value in values {
+        result.push_back(*value);
+    }
+    result
+}
+
+fn sdk_u32_vec(env: &Env, values: &[u32]) -> soroban_sdk::Vec<u32> {
+    let mut result = soroban_sdk::Vec::new(env);
+    for value in values {
+        result.push_back(*value);
+    }
+    result
+}
+
 struct TestContext<'a> {
     env: Env,
     admin: Address,
@@ -131,7 +147,8 @@ proptest! {
         // Independent rational reference: floor every share except the final
         // recipient, who receives the exact remainder.
         let total: i128 = weights.iter().sum();
-        let actual = pro_rata_shares(refund, &weights).unwrap();
+        let env = Env::default();
+        let actual = pro_rata_shares(&env, refund, &sdk_i128_vec(&env, &weights)).unwrap();
         let mut expected = alloc::vec::Vec::new();
         let mut allocated = 0i128;
         for (index, weight) in weights.iter().enumerate() {
@@ -143,6 +160,7 @@ proptest! {
             expected.push(share);
             allocated += share;
         }
+        let actual: alloc::vec::Vec<i128> = actual.iter().collect();
         prop_assert_eq!(&actual, &expected);
         prop_assert_eq!(actual.iter().sum::<i128>(), refund);
         prop_assert!(actual.iter().all(|share| *share >= 0));
@@ -160,7 +178,14 @@ proptest! {
             .collect();
         let max_referral = 10_000 - shares.iter().sum::<u32>();
         let referral_bps = referral_choice % (max_referral + 1);
-        let (actual_referral, actual) = fee_split_amounts(amount, &shares, referral_bps).unwrap();
+        let env = Env::default();
+        let (actual_referral, actual) = fee_split_amounts(
+            &env,
+            amount,
+            &sdk_u32_vec(&env, &shares),
+            referral_bps,
+        )
+        .unwrap();
         let expected_referral = amount * referral_bps as i128 / 10_000;
         let mut expected = alloc::vec::Vec::new();
         let mut allocated = expected_referral;
@@ -171,6 +196,7 @@ proptest! {
         }
         expected[0] = amount - allocated;
         prop_assert_eq!(actual_referral, expected_referral);
+        let actual: alloc::vec::Vec<i128> = actual.iter().collect();
         prop_assert_eq!(&actual, &expected);
         prop_assert_eq!(actual.iter().sum::<i128>() + actual_referral, amount);
         prop_assert!(actual.iter().all(|share| *share >= 0));
@@ -5938,8 +5964,10 @@ fn differential_test_remainder_accounting_exact() {
         let referral_bps = (lcg_next(&mut state) as u32) % 1_000; // up to 10%
 
         // Call the internal function
+        let env = Env::default();
         let (referral, recipients) =
-            crate::fee_split_amounts(amount, &shares_bps, referral_bps).unwrap();
+            crate::fee_split_amounts(&env, amount, &sdk_u32_vec(&env, &shares_bps), referral_bps)
+                .unwrap();
 
         // Verify total conservation: referral + sum(recipients) == amount
         let sum_recipients: i128 = recipients.iter().sum();
@@ -5951,7 +5979,7 @@ fn differential_test_remainder_accounting_exact() {
         );
 
         // Verify all shares are non-negative
-        for share in &recipients {
+        for share in recipients.iter() {
             assert!(*share >= 0, "negative share");
         }
         assert!(referral >= 0, "negative referral");
@@ -5983,7 +6011,9 @@ fn differential_test_pro_rata_refund_shares() {
         }
 
         // Call the internal function
-        let shares = crate::pro_rata_shares(refund_amount, &weights).unwrap();
+        let env = Env::default();
+        let shares =
+            crate::pro_rata_shares(&env, refund_amount, &sdk_i128_vec(&env, &weights)).unwrap();
 
         // Verify sum equals refund_amount exactly
         let sum_shares: i128 = shares.iter().sum();
@@ -5993,7 +6023,7 @@ fn differential_test_pro_rata_refund_shares() {
         );
 
         // Verify all shares are non-negative
-        for share in &shares {
+        for share in shares.iter() {
             assert!(*share >= 0, "negative share");
         }
 
@@ -6126,8 +6156,14 @@ fn differential_test_fixed_seed_corpus() {
 
             let referral_bps = (lcg_next(&mut state) as u32) % 1_000;
 
-            let (referral, recipients) =
-                crate::fee_split_amounts(amount, &shares_bps, referral_bps).unwrap();
+            let env = Env::default();
+            let (referral, recipients) = crate::fee_split_amounts(
+                &env,
+                amount,
+                &sdk_u32_vec(&env, &shares_bps),
+                referral_bps,
+            )
+            .unwrap();
             let sum_recipients: i128 = recipients.iter().sum();
             assert_eq!(
                 referral + sum_recipients,
