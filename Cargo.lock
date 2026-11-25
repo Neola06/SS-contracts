@@ -1379,6 +1379,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "invoice-impact-reporting"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 27.0.6",
+]
+
+[[package]]
 name = "invoice-issuer-verification"
 version = "0.1.0"
 dependencies = [
