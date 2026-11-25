@@ -150,7 +150,7 @@ attempted/minimum values. The TypeScript error SDK exports both contracts' codes
 ```sh
 cargo test -p invoice-escrow --test institutional_controls --test fuzz_refund
 cargo test -p secondary-market
-# Stellar CLI 26.0.0 (validated) builds optimized, deployment-sized artifacts:
+# Stellar CLI 27.0.0 (validated) builds optimized, deployment-sized artifacts:
 bash scripts/build-institutional.sh
 # Exercise the same acceptance cases against the compiled release WASM:
 export SS_CONTRACT_WASM_DIR="$PWD/target/institutional"

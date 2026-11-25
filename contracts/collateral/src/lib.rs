@@ -79,7 +79,7 @@ impl Collateral {
         if client.balance(&issuer) < amount {
             return Err(Error::InsufficientBalance);
         }
-        client.transfer(&issuer, &env.current_contract_address(), &amount);
+        client.transfer(&issuer, env.current_contract_address(), &amount);
 
         let record = CollateralRecord {
             invoice_id: invoice_id.clone(),

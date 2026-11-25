@@ -71,7 +71,7 @@ pub fn get_proposer_nonce(env: &Env, proposer: &Address) -> U256 {
     env.storage()
         .persistent()
         .get(&key)
-        .unwrap_or(U256::from_u32(0))
+        .unwrap_or_else(|| U256::from_u32(env, 0))
 }
 
 /// Save the next expected nonce for a proposer.

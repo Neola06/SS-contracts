@@ -525,3 +525,18 @@ pub fn allocation_applied(
         (strategy as u32, total_allocated),
     );
 }
+
+/// Publish a change to a currency's maximum FX quote age.
+pub fn currency_max_age_set(env: &Env, currency: &Symbol, max_age_secs: u64) {
+    env.events().publish(
+        (Symbol::new(env, "currency_max_age_set"), currency.clone()),
+        max_age_secs,
+    );
+}
+
+pub fn fee_snapshot_created(env: &Env, invoice_id: &BytesN<32>, effective_fee_bps: u32) {
+    env.events().publish(
+        (Symbol::new(env, "fee_snapshot_created"), invoice_id.clone()),
+        effective_fee_bps,
+    );
+}

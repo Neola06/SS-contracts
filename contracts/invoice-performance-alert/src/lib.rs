@@ -220,8 +220,8 @@ impl InvoicePerformanceAlert {
             days_to_close: evaluation.days_to_close,
             days_to_due: evaluation.days_to_due,
             last_alert_at: latest.map_or(0, |record| record.timestamp),
-            last_alert_type: latest_type,
-            last_severity: latest.map(|record| record.severity),
+            last_alert_type: latest_type.map(|risk| risk as u32),
+            last_severity: latest.map(|record| record.severity as u32),
         })
     }
 

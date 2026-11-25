@@ -2722,8 +2722,8 @@ impl InvoiceEscrow {
         env: Env,
         invoice_id: BytesN<32>,
     ) -> Result<PendingSettlement, Error> {
-        let proposal =
-            storage::get_settlement_proposal(&env, &invoice_id).ok_or(Error::SettlementNotProposed)?;
+        let proposal = storage::get_settlement_proposal(&env, &invoice_id)
+            .ok_or(Error::SettlementNotProposed)?;
         let expires_at_ledger =
             Self::settlement_expires_at(&env, &invoice_id).ok_or(Error::SettlementNotProposed)?;
         Ok(PendingSettlement {
@@ -2743,8 +2743,8 @@ impl InvoiceEscrow {
     ) -> Result<(), Error> {
         caller.require_auth();
         let config = storage::get_config(&env).ok_or(Error::NotInit)?;
-        let proposal =
-            storage::get_settlement_proposal(&env, &invoice_id).ok_or(Error::SettlementNotProposed)?;
+        let proposal = storage::get_settlement_proposal(&env, &invoice_id)
+            .ok_or(Error::SettlementNotProposed)?;
         if caller != proposal.proposer && caller != config.admin {
             return Err(Error::Unauthorized);
         }
@@ -2756,13 +2756,18 @@ impl InvoiceEscrow {
     /// Clear a pending settlement proposal whose approval window has passed. Anyone may call
     /// this. It moves no funds and does not finalise the invoice; a new proposal can then be made.
     pub fn expire_settlement(env: Env, invoice_id: BytesN<32>) -> Result<(), Error> {
-        let proposal =
-            storage::get_settlement_proposal(&env, &invoice_id).ok_or(Error::SettlementNotProposed)?;
+        let proposal = storage::get_settlement_proposal(&env, &invoice_id)
+            .ok_or(Error::SettlementNotProposed)?;
         if !Self::settlement_expired(&env, &invoice_id) {
             return Err(Error::SettlementNotExpired);
         }
         Self::clear_settlement(&env, &invoice_id);
-        events::settlement_expired(&env, &invoice_id, &proposal.proposer, proposal.repayment_amount);
+        events::settlement_expired(
+            &env,
+            &invoice_id,
+            &proposal.proposer,
+            proposal.repayment_amount,
+        );
         Ok(())
     }
 
@@ -3245,6 +3250,41 @@ impl InvoiceEscrow {
         storage::set_invoice(&env, invoice_id.clone(), &invoice);
         events::allocation_applied(&env, &invoice_id, strategy, total_allocated);
         Ok(previews)
+    }
+
+    /// Implement invoice settlement escrow release with on-time bonus distribution (#730)
+    fn record_fee_snapshot(
+        env: &Env,
+        invoice_id: &BytesN<32>,
+        category_fee_bps: u32,
+        platform_fee_bps: u32,
+        distributor_fee_bps: u32,
+    ) -> Result<FeeSnapshot, Error> {
+        if category_fee_bps > 10_000 || platform_fee_bps > 10_000 || distributor_fee_bps > 10_000 {
+            return Err(Error::InvalidFeeBps);
+        }
+        let effective_fee_bps = category_fee_bps;
+        let snapshot = FeeSnapshot {
+            category_fee_bps,
+            platform_fee_bps,
+            distributor_fee_bps,
+            effective_fee_bps,
+        };
+        let key = types::StorageKey::FeeSnap(invoice_id.clone());
+        let existed = env.storage().persistent().has(&key);
+        env.storage().persistent().set(&key, &snapshot);
+        if !existed {
+            let count: u32 = env
+                .storage()
+                .instance()
+                .get(&types::StorageKey::FeeSnapCnt)
+                .unwrap_or(0);
+            env.storage()
+                .instance()
+                .set(&types::StorageKey::FeeSnapCnt, &(count + 1));
+        }
+        events::fee_snapshot_created(env, invoice_id, effective_fee_bps);
+        Ok(snapshot)
     }
 
     /// Implement invoice settlement escrow release with on-time bonus distribution (#730)

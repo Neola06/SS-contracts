@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use soroban_sdk::{Address, BytesN, Env, Symbol};
 
 pub fn collateral_deposited(env: &Env, invoice_id: &BytesN<32>, issuer: &Address, amount: i128) {

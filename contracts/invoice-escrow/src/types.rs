@@ -69,11 +69,42 @@ pub enum StorageKey {
     AllocStrat(soroban_sdk::BytesN<32>),
     /// Persistent: funded allocation per (invoice_id, investor).
     FundAlloc(soroban_sdk::BytesN<32>, soroban_sdk::Address),
+    /// Persistent: ledger expiry for a pending settlement proposal.
+    SettleExp(soroban_sdk::BytesN<32>),
+    /// Instance: default TTL ledgers for pending settlement proposals.
+    SettleTtl,
+    /// Persistent: formal fee snapshot per invoice.
+    FeeSnap(soroban_sdk::BytesN<32>),
+    /// Instance: total number of fee snapshots recorded.
+    FeeSnapCnt,
+    /// Instance: maximum FX quote age for a currency.
+    CurrencyMaxAge(soroban_sdk::Symbol),
     /// Instance: generation of the active emergency multi-sig configuration. Bumped on every
     /// `set_emergency_config`, so approvals made under an older configuration stop counting.
     EmergencyGeneration,
     /// Persistent: emergency-configuration generation that an invoice's approvals belong to.
     EmergencyApprovalGen(soroban_sdk::Symbol),
+}
+
+/// Status and expiry details for a pending settlement proposal.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SettlementProposalStatus {
+    pub proposer: soroban_sdk::Address,
+    pub repayment_amount: i128,
+    pub expires_at_ledger: u32,
+    pub remaining_ttl: u32,
+    pub expired: bool,
+}
+
+/// Fee configuration captured for an invoice.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeSnapshot {
+    pub category_fee_bps: u32,
+    pub platform_fee_bps: u32,
+    pub distributor_fee_bps: u32,
+    pub effective_fee_bps: u32,
 }
 
 /// Bounded allocation strategy for invoice funding fills.

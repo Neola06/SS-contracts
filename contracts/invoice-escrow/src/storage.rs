@@ -607,3 +607,10 @@ pub fn compact_invoice_storage(
 
     removed
 }
+
+/// Get the configured admin address.
+pub fn get_admin(env: &Env) -> Result<Address, crate::errors::Error> {
+    get_config(env)
+        .map(|config| config.admin)
+        .ok_or(crate::errors::Error::NotInit)
+}

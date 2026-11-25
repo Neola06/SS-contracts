@@ -157,7 +157,7 @@ impl InvoiceCoInvestment {
         // Transfer tokens to the contract (held in escrow).
         token::Client::new(&env, &cfg.token).transfer(
             &investor,
-            &env.current_contract_address(),
+            env.current_contract_address(),
             &amount,
         );
 

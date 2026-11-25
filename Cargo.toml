@@ -70,7 +70,7 @@ members = [
 [workspace.dependencies]
 soroban-sdk = "27.0.2"
 soroban-env-host = "27.0.2"
-proptest = "1"
+proptest = "=1.6.0"
 
 [profile.release]
 opt-level = "z"
