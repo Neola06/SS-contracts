@@ -66,6 +66,7 @@ members = [
     "contracts/settlement-priority-queue",
     "contracts/rate-auction",
     "contracts/invoice-impact-reporting",
+    "contracts/invoice-greylisting",
 ]
 
 [workspace.dependencies]
