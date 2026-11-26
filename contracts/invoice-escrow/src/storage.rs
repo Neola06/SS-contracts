@@ -4,8 +4,10 @@ use soroban_sdk::{Address, BytesN, Env, Symbol, Vec};
 
 use crate::types::{
     CategoryFeeSchedule, Config, DisputeData, EmergencyApprovals, EscrowData, InstallmentMilestone,
-    InvestmentRecord, InvoiceCategory, InvoiceData, MultiSigConfig, SettlementProposal, StorageKey,
+    InvestmentRecord, InvoiceCategory, InvoiceData, MultiSigConfig, SettlementProposal,
 };
+
+pub use crate::types::StorageKey;
 
 /// Ledgers below which a persistent entry's TTL is extended (~7 days at 5s/ledger).
 pub const TTL_THRESHOLD: u32 = 120_960;
@@ -14,16 +16,20 @@ pub const MIN_TTL_EXTEND: u32 = 1_036_800;
 
 /// Extend the TTL of any persistent storage entry to at least 60 days in ledger units.
 pub fn bump_persistent(env: &Env, key: &StorageKey) {
-    env.storage()
-        .persistent()
-        .extend_ttl(key, TTL_THRESHOLD, MIN_TTL_EXTEND);
+    if env.storage().persistent().has(key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, TTL_THRESHOLD, MIN_TTL_EXTEND);
+    }
 }
 
 /// Load contract config from instance storage, bumping instance TTL.
 pub fn get_config(env: &Env) -> Option<Config> {
-    env.storage()
-        .instance()
-        .extend_ttl(TTL_THRESHOLD, MIN_TTL_EXTEND);
+    if env.storage().instance().has(&StorageKey::Config) {
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, MIN_TTL_EXTEND);
+    }
     env.storage().instance().get(&StorageKey::Config)
 }
 
@@ -164,9 +170,11 @@ pub fn has_invoice(env: &soroban_sdk::Env, invoice_id: BytesN<32>) -> bool {
 
 /// Load the emergency multi-sig admin configuration.
 pub fn get_emergency_config(env: &Env) -> Option<MultiSigConfig> {
-    env.storage()
-        .instance()
-        .extend_ttl(TTL_THRESHOLD, MIN_TTL_EXTEND);
+    if env.storage().instance().has(&StorageKey::EmergencyConfig) {
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, MIN_TTL_EXTEND);
+    }
     env.storage().instance().get(&StorageKey::EmergencyConfig)
 }
 
@@ -196,48 +204,11 @@ pub fn get_emergency_approvals(env: &Env, inv_id: &Symbol) -> EmergencyApprovals
     approvals
 }
 
-/// Save emergency approvals for a given invoice, tagged with the active configuration generation.
+/// Save emergency approvals for a given invoice.
 pub fn set_emergency_approvals(env: &Env, inv_id: &Symbol, approvals: &EmergencyApprovals) {
     let key = StorageKey::EmergencyApprovals(inv_id.clone());
     env.storage().persistent().set(&key, approvals);
     bump_persistent(env, &key);
-    let tag_key = StorageKey::EmergencyApprovalGen(inv_id.clone());
-    env.storage()
-        .persistent()
-        .set(&tag_key, &get_emergency_generation(env));
-    bump_persistent(env, &tag_key);
-}
-
-/// Current generation of the emergency multi-sig configuration (0 before any configuration).
-pub fn get_emergency_generation(env: &Env) -> u32 {
-    env.storage()
-        .instance()
-        .get(&StorageKey::EmergencyGeneration)
-        .unwrap_or(0)
-}
-
-/// Start a new configuration generation. Every approval stored under an older generation
-/// becomes invalid, because approvals are only counted when their tag matches this value.
-pub fn bump_emergency_generation(env: &Env) {
-    let next = get_emergency_generation(env).saturating_add(1);
-    env.storage()
-        .instance()
-        .set(&StorageKey::EmergencyGeneration, &next);
-}
-
-/// Approvals for an invoice that were made under the active configuration generation.
-/// Approvals from any earlier generation read as empty.
-pub fn get_current_emergency_approvals(env: &Env, inv_id: &Symbol) -> EmergencyApprovals {
-    let tag: Option<u32> = env
-        .storage()
-        .persistent()
-        .get(&StorageKey::EmergencyApprovalGen(inv_id.clone()));
-    if tag != Some(get_emergency_generation(env)) {
-        return EmergencyApprovals {
-            approvals: Vec::new(env),
-        };
-    }
-    get_emergency_approvals(env, inv_id)
 }
 
 /// Load invoice record by BytesN<32>.
@@ -599,18 +570,8 @@ pub fn compact_invoice_storage(
     let emergency_key = StorageKey::EmergencyApprovals(inv_id.clone());
     if env.storage().persistent().has(&emergency_key) {
         env.storage().persistent().remove(&emergency_key);
-        env.storage()
-            .persistent()
-            .remove(&StorageKey::EmergencyApprovalGen(inv_id.clone()));
         removed += 1;
     }
 
     removed
-}
-
-/// Get the configured admin address.
-pub fn get_admin(env: &Env) -> Result<Address, crate::errors::Error> {
-    get_config(env)
-        .map(|config| config.admin)
-        .ok_or(crate::errors::Error::NotInit)
 }

@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Symbol};
 
@@ -6,7 +9,6 @@ use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Symbol};
 ///
 /// Rewards investors for bringing new wallets to the platform, distributing
 /// 20% of the platform fee on the referred wallet's first investment.
-
 const REFERRAL_REWARD_BPS: i128 = 2000; // 20% in basis points
 const BPS_DENOMINATOR: i128 = 10000;
 
@@ -76,9 +78,9 @@ impl ReferralContract {
             .storage()
             .persistent()
             .get(&DataKey::FirstInvestment(wallet.clone()))
-            .unwrap_or(true);
+            .unwrap_or(false);
 
-        if !is_first {
+        if is_first {
             // Not first investment, no reward
             return None;
         }

@@ -1,10 +1,7 @@
 #![allow(deprecated, unused_variables, dead_code, unused_mut, clippy::all)]
 
 use super::*;
-use soroban_sdk::{
-    testutils::{Address as _, Events as _, Ledger as _},
-    Address, BytesN, Env,
-};
+use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Address, BytesN, Env};
 
 #[test]
 fn test_place_buy_order_and_cancel() {
@@ -15,8 +12,11 @@ fn test_place_buy_order_and_cancel() {
     let client = OrderBookClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
-    let token = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let buyer = Address::generate(&env);
+    StellarAssetClient::new(&env, &token).mint(&buyer, &1_000);
 
     client.initialize(&admin, &token);
 
@@ -57,10 +57,15 @@ fn test_match_listing_and_price_sorting() {
     let client = OrderBookClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
-    let token = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let buyer1 = Address::generate(&env);
     let buyer2 = Address::generate(&env);
     let seller = Address::generate(&env);
+    let token_client = StellarAssetClient::new(&env, &token);
+    token_client.mint(&buyer1, &400);
+    token_client.mint(&buyer2, &500);
 
     client.initialize(&admin, &token);
 
@@ -106,9 +111,12 @@ fn test_unmatched_orders_remain_open_when_ask_too_high() {
     let client = OrderBookClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
-    let token = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let buyer = Address::generate(&env);
     let seller = Address::generate(&env);
+    StellarAssetClient::new(&env, &token).mint(&buyer, &500);
 
     client.initialize(&admin, &token);
 

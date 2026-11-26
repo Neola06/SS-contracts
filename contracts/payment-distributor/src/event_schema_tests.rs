@@ -7,11 +7,8 @@
 #![allow(deprecated, unused_variables, dead_code, unused_mut, clippy::all)]
 
 use super::*;
-use crate::events::*;
 use soroban_sdk::testutils::{Address as _, Events, Ledger};
-use soroban_sdk::{
-    contract, contractimpl, token, Address, BytesN, Env, IntoVal, Symbol, TryFromVal, Val, Vec,
-};
+use soroban_sdk::{token, Address, BytesN, Env, Symbol, TryFromVal, Val, Vec};
 
 use invoice_escrow::{InvoiceEscrow, InvoiceEscrowClient};
 use invoice_token::{InvoiceToken, InvoiceTokenClient};
@@ -26,6 +23,13 @@ fn parse_event(env: &Env, event: &soroban_sdk::xdr::ContractEvent) -> (Vec<Val>,
     .unwrap();
     let data = Val::try_from_val(env, &v0.data).unwrap();
     (topics, data)
+}
+
+fn assert_val_type<T>(env: &Env, val: &Val)
+where
+    T: TryFromVal<Env, Val>,
+{
+    assert!(T::try_from_val(env, val).is_ok());
 }
 
 fn test_commitment(env: &Env, data: &str) -> BytesN<32> {
@@ -86,8 +90,8 @@ fn event_schema_snapshot_payment_distributed() {
         &1000,
         &1000,
         &1_000_000,
-        &payment_token.address(),
-        &inv_token.address(),
+        &payment_token.address,
+        &inv_token.address,
         &test_commitment(&env, "test"),
         &None,
         &None,
@@ -98,19 +102,20 @@ fn event_schema_snapshot_payment_distributed() {
 
     escrow.record_payment(&invoice_id, &payer, &1000);
 
-    let events = env.events().all();
+    let contract_events = env.events().all();
+    let events = contract_events.events();
     let mut found = false;
     for event in events.iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if !topics.is_empty() {
+            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(0).unwrap()) {
                 if sym == Symbol::new(&env, "PaymentDistributed") {
                     found = true;
 
-                    // Verify topic structure: [contract, "PaymentDistributed", escrow, invoice_id]
+                    // The contract ID is stored separately from the event topics.
                     assert!(
-                        topics.len() >= 4,
-                        "PaymentDistributed should have at least 4 topics"
+                        topics.len() >= 3,
+                        "PaymentDistributed should have at least 3 topics"
                     );
 
                     // Verify data: (recipients, amounts, escrow_status, timestamp)
@@ -123,25 +128,13 @@ fn event_schema_snapshot_payment_distributed() {
                     );
 
                     // recipients: Vec<Address>
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Vec
-                    );
+                    assert_val_type::<Vec<Address>>(&env, &data_vec.get(0).unwrap());
                     // amounts: Vec<i128>
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Vec
-                    );
+                    assert_val_type::<Vec<i128>>(&env, &data_vec.get(1).unwrap());
                     // escrow_status: u32
-                    assert_eq!(
-                        data_vec.get(2).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::U32
-                    );
+                    assert_val_type::<u32>(&env, &data_vec.get(2).unwrap());
                     // timestamp: u64
-                    assert_eq!(
-                        data_vec.get(3).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::U64
-                    );
+                    assert_val_type::<u64>(&env, &data_vec.get(3).unwrap());
 
                     break;
                 }
@@ -200,8 +193,8 @@ fn event_schema_snapshot_refund_distributed() {
         &1000,
         &1000,
         &1_000_000,
-        &payment_token.address(),
-        &inv_token.address(),
+        &payment_token.address,
+        &inv_token.address,
         &test_commitment(&env, "test"),
         &None,
         &None,
@@ -217,19 +210,20 @@ fn event_schema_snapshot_refund_distributed() {
 
     escrow.refund_escrow(&invoice_id);
 
-    let events = env.events().all();
+    let contract_events = env.events().all();
+    let events = contract_events.events();
     let mut found = false;
     for event in events.iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if !topics.is_empty() {
+            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(0).unwrap()) {
                 if sym == Symbol::new(&env, "refund_distributed") {
                     found = true;
 
-                    // Verify topic structure: [contract, "refund_distributed", escrow, invoice_id]
+                    // The contract ID is stored separately from the event topics.
                     assert!(
-                        topics.len() >= 4,
-                        "refund_distributed should have at least 4 topics"
+                        topics.len() >= 3,
+                        "refund_distributed should have at least 3 topics"
                     );
 
                     // Verify data: (recipients, amounts)
@@ -241,14 +235,8 @@ fn event_schema_snapshot_refund_distributed() {
                         "refund_distributed data should have 2 fields"
                     );
 
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Vec
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Vec
-                    );
+                    assert_val_type::<Vec<Address>>(&env, &data_vec.get(0).unwrap());
+                    assert_val_type::<Vec<i128>>(&env, &data_vec.get(1).unwrap());
 
                     break;
                 }
@@ -264,8 +252,6 @@ fn event_schema_snapshot_asset_distributed() {
     env.mock_all_auths();
 
     let admin = Address::generate(&env);
-    let caller = Address::generate(&env);
-
     let distributor_id = env.register_contract(None, PaymentDistributor);
     let distributor = PaymentDistributorClient::new(&env, &distributor_id);
 
@@ -277,7 +263,7 @@ fn event_schema_snapshot_asset_distributed() {
     distributor.initialize(&admin);
 
     // Give contract some tokens
-    payment_asset.mint(&env.current_contract_address(), &1000);
+    payment_asset.mint(&distributor_id, &1000);
 
     let split = crate::types::DistributionSplit {
         recipients: soroban_sdk::vec![&env, admin.clone()],
@@ -287,28 +273,29 @@ fn event_schema_snapshot_asset_distributed() {
     };
 
     let route = crate::types::AssetRoute {
-        token: payment_token.address(),
+        token: payment_token.address.clone(),
         amount: 1000,
         split,
     };
 
     let _ = env.events().all();
 
-    distributor.distribute_multi_asset(&caller, &soroban_sdk::vec![&env, route]);
+    distributor.distribute_multi_asset(&admin, &soroban_sdk::vec![&env, route]);
 
-    let events = env.events().all();
+    let contract_events = env.events().all();
+    let events = contract_events.events();
     let mut found = false;
     for event in events.iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if !topics.is_empty() {
+            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(0).unwrap()) {
                 if sym == Symbol::new(&env, "AssetDistributed") {
                     found = true;
 
-                    // Verify topic structure: [contract, "AssetDistributed", token]
+                    // The contract ID is stored separately from the event topics.
                     assert!(
-                        topics.len() >= 3,
-                        "AssetDistributed should have at least 3 topics"
+                        topics.len() >= 2,
+                        "AssetDistributed should have at least 2 topics"
                     );
 
                     // Verify data: (recipients, amounts, total)
@@ -320,18 +307,9 @@ fn event_schema_snapshot_asset_distributed() {
                         "AssetDistributed data should have 3 fields"
                     );
 
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Vec
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Vec
-                    );
-                    assert_eq!(
-                        data_vec.get(2).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
+                    assert_val_type::<Vec<Address>>(&env, &data_vec.get(0).unwrap());
+                    assert_val_type::<Vec<i128>>(&env, &data_vec.get(1).unwrap());
+                    assert_val_type::<i128>(&env, &data_vec.get(2).unwrap());
 
                     break;
                 }
@@ -360,25 +338,26 @@ fn event_schema_snapshot_emergency_withdrawal() {
     distributor.initialize(&admin);
 
     // Give contract some tokens
-    payment_asset.mint(&env.current_contract_address(), &1000);
+    payment_asset.mint(&distributor_id, &1000);
 
     let _ = env.events().all();
 
-    distributor.emergency_withdraw(&admin, &payment_token.address(), &to);
+    distributor.emergency_withdraw(&admin, &payment_token.address, &to);
 
-    let events = env.events().all();
+    let contract_events = env.events().all();
+    let events = contract_events.events();
     let mut found = false;
     for event in events.iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if !topics.is_empty() {
+            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(0).unwrap()) {
                 if sym == Symbol::new(&env, "EmergencyWithdrawal") {
                     found = true;
 
-                    // Verify topic structure: [contract, "EmergencyWithdrawal", token]
+                    // The contract ID is stored separately from the event topics.
                     assert!(
-                        topics.len() >= 3,
-                        "EmergencyWithdrawal should have at least 3 topics"
+                        topics.len() >= 2,
+                        "EmergencyWithdrawal should have at least 2 topics"
                     );
 
                     // Verify data: (admin, to, amount)
@@ -390,18 +369,9 @@ fn event_schema_snapshot_emergency_withdrawal() {
                         "EmergencyWithdrawal data should have 3 fields"
                     );
 
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(2).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
+                    assert_val_type::<Address>(&env, &data_vec.get(0).unwrap());
+                    assert_val_type::<Address>(&env, &data_vec.get(1).unwrap());
+                    assert_val_type::<i128>(&env, &data_vec.get(2).unwrap());
 
                     break;
                 }
@@ -430,41 +400,33 @@ fn event_schema_snapshot_dust_swept() {
     distributor.initialize(&admin);
 
     // Give contract some tokens
-    payment_asset.mint(&env.current_contract_address(), &1000);
+    payment_asset.mint(&distributor_id, &1000);
 
     let _ = env.events().all();
 
-    distributor.sweep_dust(&admin, &payment_token.address());
+    distributor.sweep_dust(&admin, &payment_token.address);
 
-    let events = env.events().all();
+    let contract_events = env.events().all();
+    let events = contract_events.events();
     let mut found = false;
     for event in events.iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if !topics.is_empty() {
+            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(0).unwrap()) {
                 if sym == Symbol::new(&env, "DustSwept") {
                     found = true;
 
-                    // Verify topic structure: [contract, "DustSwept", token]
-                    assert!(topics.len() >= 3, "DustSwept should have at least 3 topics");
+                    // The contract ID is stored separately from the event topics.
+                    assert!(topics.len() >= 2, "DustSwept should have at least 2 topics");
 
                     // Verify data: (admin, to, amount)
                     let (_, data) = parse_event(&env, &event);
                     let data_vec = Vec::<Val>::try_from_val(&env, &data).unwrap();
                     assert_eq!(data_vec.len(), 3, "DustSwept data should have 3 fields");
 
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(2).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
+                    assert_val_type::<Address>(&env, &data_vec.get(0).unwrap());
+                    assert_val_type::<Address>(&env, &data_vec.get(1).unwrap());
+                    assert_val_type::<i128>(&env, &data_vec.get(2).unwrap());
 
                     break;
                 }
@@ -526,8 +488,8 @@ fn event_schema_snapshot_excess_refunded() {
         &1000,
         &1000,
         &1_000_000,
-        &payment_token.address(),
-        &inv_token.address(),
+        &payment_token.address,
+        &inv_token.address,
         &test_commitment(&env, "test"),
         &None,
         &None,
@@ -538,22 +500,26 @@ fn event_schema_snapshot_excess_refunded() {
 
     escrow.record_payment(&invoice_id, &payer, &1000);
 
-    // Now call refund_excess
-    distributor.refund_excess(&escrow_id, &payment_token.address(), &invoice_id);
+    // Simulate surplus funds left by an over-deposit from the escrow.
+    payment_asset.mint(&distributor_id, &100);
 
-    let events = env.events().all();
+    // Now call refund_excess
+    distributor.refund_excess(&escrow_id, &payment_token.address, &invoice_id);
+
+    let contract_events = env.events().all();
+    let events = contract_events.events();
     let mut found = false;
     for event in events.iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if !topics.is_empty() {
+            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(0).unwrap()) {
                 if sym == Symbol::new(&env, "ExcessRefunded") {
                     found = true;
 
-                    // Verify topic structure: [contract, "ExcessRefunded", token, invoice_id]
+                    // The contract ID is stored separately from the event topics.
                     assert!(
-                        topics.len() >= 4,
-                        "ExcessRefunded should have at least 4 topics"
+                        topics.len() >= 3,
+                        "ExcessRefunded should have at least 3 topics"
                     );
 
                     // Verify data: (escrow, amount)
@@ -565,14 +531,8 @@ fn event_schema_snapshot_excess_refunded() {
                         "ExcessRefunded data should have 2 fields"
                     );
 
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
+                    assert_val_type::<Address>(&env, &data_vec.get(0).unwrap());
+                    assert_val_type::<i128>(&env, &data_vec.get(1).unwrap());
 
                     break;
                 }
@@ -594,24 +554,25 @@ fn event_schema_snapshot_initialized() {
 
     distributor.initialize(&admin);
 
-    let events = env.events().all();
+    let contract_events = env.events().all();
+    let events = contract_events.events();
     let mut found = false;
     for event in events.iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if !topics.is_empty() {
+            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(0).unwrap()) {
                 if sym == Symbol::new(&env, "initialized") {
                     found = true;
 
-                    // Verify topic structure: [contract, "initialized"]
+                    // The contract ID is stored separately from the event topics.
                     assert!(
-                        topics.len() >= 2,
-                        "initialized should have at least 2 topics"
+                        topics.len() >= 1,
+                        "initialized should have at least 1 topic"
                     );
 
                     // Verify data: admin
                     let (_, data) = parse_event(&env, &event);
-                    assert_eq!(data.type_of(), soroban_sdk::xdr::ScValType::Address);
+                    assert_val_type::<Address>(&env, &data);
 
                     break;
                 }

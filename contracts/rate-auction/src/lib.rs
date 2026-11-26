@@ -22,6 +22,10 @@
 //! - `get_commitments(invoice_id)` — view: commitment list
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -220,7 +224,7 @@ impl RateAuction {
 
         // Pull tokens from the investor.
         let token_client = token::Client::new(&env, &auction.token);
-        token_client.transfer(&investor, &env.current_contract_address(), &actual_amount);
+        token_client.transfer(&investor, env.current_contract_address(), &actual_amount);
 
         // Record the commitment.
         let mut commitments = storage::get_commitments(&env, &invoice_id);

@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -42,6 +45,7 @@ impl PortfolioNavSnapshotContract {
             .get(&DataKey::Operator)
             .ok_or(Error::NotInitialized)?;
 
+        caller.require_auth();
         if caller != admin && caller != operator {
             return Err(Error::Unauthorized);
         }
@@ -75,6 +79,7 @@ impl PortfolioNavSnapshotContract {
             .get(&DataKey::Operator)
             .ok_or(Error::NotInitialized)?;
 
+        caller.require_auth();
         if caller != admin && caller != operator {
             return Err(Error::Unauthorized);
         }

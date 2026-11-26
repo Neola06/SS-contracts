@@ -13,8 +13,7 @@
 use super::{InvoiceToken, InvoiceTokenClient};
 use soroban_sdk::testutils::{Address as _, Events, Ledger};
 use soroban_sdk::{
-    contract, contractimpl, Address, Env, IntoVal, String as SorobanString, Symbol, TryFromVal,
-    Val, Vec,
+    contract, contractimpl, Address, Env, String as SorobanString, Symbol, TryFromVal, Val, Vec,
 };
 
 use crate::errors::Error;
@@ -119,7 +118,7 @@ impl Harness {
     /// model to exercise the burn callback).
     fn new(initial_balance: i128) -> Self {
         let env = Env::default();
-        env.mock_all_auths();
+        env.mock_all_auths_allowing_non_root_auth();
 
         let token_id = env.register(InvoiceToken, ());
         let token = InvoiceTokenClient::new(&env, &token_id);

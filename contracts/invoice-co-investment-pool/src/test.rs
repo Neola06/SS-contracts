@@ -1,7 +1,7 @@
 //! Tests for the invoice co-investment pool contract (issue #637).
 
 use super::*;
-use soroban_sdk::testutils::{Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke};
+use soroban_sdk::testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke};
 use soroban_sdk::token::{Client as TokenClient, StellarAssetClient};
 use soroban_sdk::xdr::{ContractEvent, ContractEventBody, ScVal};
 use soroban_sdk::{
@@ -125,9 +125,13 @@ fn last_event_data(env: &Env, name: &str) -> Option<Val> {
     let mut result = None;
     for event in env.events().all().events().iter() {
         let (topics, data) = parse_event(env, event);
-        let topic = Symbol::try_from_val(env, &topics.get(0).unwrap()).unwrap();
-        if topic == Symbol::new(env, name) {
-            result = Some(data);
+        for i in 0..topics.len() {
+            if let Ok(topic) = Symbol::try_from_val(env, &topics.get(i).unwrap()) {
+                if topic == Symbol::new(env, name) {
+                    result = Some(data);
+                    break;
+                }
+            }
         }
     }
     result
@@ -138,9 +142,13 @@ fn event_count(env: &Env, name: &str) -> u32 {
     let mut count = 0;
     for event in env.events().all().events().iter() {
         let (topics, _data) = parse_event(env, event);
-        let topic = Symbol::try_from_val(env, &topics.get(0).unwrap()).unwrap();
-        if topic == Symbol::new(env, name) {
-            count += 1;
+        for i in 0..topics.len() {
+            if let Ok(topic) = Symbol::try_from_val(env, &topics.get(i).unwrap()) {
+                if topic == Symbol::new(env, name) {
+                    count += 1;
+                    break;
+                }
+            }
         }
     }
     count
@@ -155,6 +163,12 @@ fn create_pool_opens_a_pool() {
 
     let pool_id = ctx.create_pool(1_000, 100);
     assert_eq!(pool_id, 1);
+    assert_eq!(event_count(&env, "PoolCreated"), 1);
+    let data = last_event_data(&env, "PoolCreated").unwrap();
+    let (invoice_id, target, min): (Symbol, i128, i128) = data.try_into_val(&env).unwrap();
+    assert_eq!(invoice_id, ctx.invoice_id);
+    assert_eq!(target, 1_000);
+    assert_eq!(min, 100);
 
     let pool = ctx.client.get_pool(&pool_id);
     assert_eq!(pool.pool_id, 1);
@@ -164,13 +178,6 @@ fn create_pool_opens_a_pool() {
     assert_eq!(pool.total_raised, 0);
     assert_eq!(pool.investor_count, 0);
     assert_eq!(pool.status, PoolStatus::Open);
-
-    assert_eq!(event_count(&env, "PoolCreated"), 1);
-    let data = last_event_data(&env, "PoolCreated").unwrap();
-    let (invoice_id, target, min): (Symbol, i128, i128) = data.try_into_val(&env).unwrap();
-    assert_eq!(invoice_id, ctx.invoice_id);
-    assert_eq!(target, 1_000);
-    assert_eq!(min, 100);
 }
 
 #[test]
@@ -235,7 +242,13 @@ fn join_pool_moves_the_funds_into_the_pool() {
     let pool_id = ctx.create_pool(1_000, 100);
     StellarAssetClient::new(&env, &ctx.token_id).mint(&ctx.investor, &10_000);
 
-    ctx.join(&pool_id, &ctx.investor, 600);
+    ctx.join(pool_id, &ctx.investor, 600);
+    assert_eq!(event_count(&env, "PoolJoined"), 1);
+    let data = last_event_data(&env, "PoolJoined").unwrap();
+    let (investor, amount, total): (Address, i128, i128) = data.try_into_val(&env).unwrap();
+    assert_eq!(investor, ctx.investor);
+    assert_eq!(amount, 600);
+    assert_eq!(total, 600);
 
     assert_eq!(ctx.balance(&ctx.investor), 9_400);
     assert_eq!(ctx.balance(&ctx.contract_id), 600);
@@ -245,11 +258,6 @@ fn join_pool_moves_the_funds_into_the_pool() {
     assert_eq!(pool.total_raised, 600);
     assert_eq!(pool.investor_count, 1);
 
-    assert_eq!(event_count(&env, "PoolJoined"), 1);
-    let data = last_event_data(&env, "PoolJoined").unwrap();
-    let (investor, amount, total): (Address, i128, i128) = data.try_into_val(&env).unwrap();
-    assert_eq!(investor, ctx.investor);
-    assert_eq!(amount, 600);
     assert_eq!(total, 600);
 }
 
@@ -260,8 +268,8 @@ fn join_pool_tops_up_an_existing_contribution() {
     let pool_id = ctx.create_pool(1_000, 100);
     StellarAssetClient::new(&env, &ctx.token_id).mint(&ctx.investor, &10_000);
 
-    ctx.join(&pool_id, &ctx.investor, 600);
-    ctx.join(&pool_id, &ctx.investor, 400);
+    ctx.join(pool_id, &ctx.investor, 600);
+    ctx.join(pool_id, &ctx.investor, 400);
 
     assert_eq!(ctx.client.get_contribution(&pool_id, &ctx.investor), 1_000);
     let pool = ctx.client.get_pool(&pool_id);
@@ -279,11 +287,16 @@ fn execute_pool_funds_the_invoice_as_one_position() {
     StellarAssetClient::new(&env, &ctx.token_id).mint(&ctx.investor, &10_000);
     StellarAssetClient::new(&env, &ctx.token_id).mint(&ctx.other_investor, &10_000);
 
-    ctx.join(&pool_id, &ctx.investor, 600);
-    ctx.join(&pool_id, &ctx.other_investor, 400);
+    ctx.join(pool_id, &ctx.investor, 600);
+    ctx.join(pool_id, &ctx.other_investor, 400);
 
     let amount = ctx.client.execute_pool(&pool_id);
     assert_eq!(amount, 1_000);
+    assert_eq!(event_count(&env, "PoolExecuted"), 1);
+    let data = last_event_data(&env, "PoolExecuted").unwrap();
+    let (invoice_id, funded): (Symbol, i128) = data.try_into_val(&env).unwrap();
+    assert_eq!(invoice_id, ctx.invoice_id);
+    assert_eq!(funded, 1_000);
 
     // The invoice received a single position held by the pool contract.
     let escrow = MockEscrowClient::new(&env, &ctx.escrow_id);
@@ -300,12 +313,6 @@ fn execute_pool_funds_the_invoice_as_one_position() {
 
     let pool = ctx.client.get_pool(&pool_id);
     assert_eq!(pool.status, PoolStatus::Executed);
-
-    assert_eq!(event_count(&env, "PoolExecuted"), 1);
-    let data = last_event_data(&env, "PoolExecuted").unwrap();
-    let (invoice_id, funded): (Symbol, i128) = data.try_into_val(&env).unwrap();
-    assert_eq!(invoice_id, ctx.invoice_id);
-    assert_eq!(funded, 1_000);
 }
 
 #[test]
@@ -314,7 +321,7 @@ fn execute_pool_is_restricted_to_the_admin() {
     let ctx = setup(&env);
     let pool_id = ctx.create_pool(1_000, 100);
     StellarAssetClient::new(&env, &ctx.token_id).mint(&ctx.investor, &10_000);
-    ctx.join(&pool_id, &ctx.investor, 1_000);
+    ctx.join(pool_id, &ctx.investor, 1_000);
 
     let impostor = Address::generate(&env);
     let invoke = MockAuthInvoke {
@@ -339,7 +346,7 @@ fn execute_pool_before_the_target_is_rejected() {
     let ctx = setup(&env);
     let pool_id = ctx.create_pool(1_000, 100);
     StellarAssetClient::new(&env, &ctx.token_id).mint(&ctx.investor, &10_000);
-    ctx.join(&pool_id, &ctx.investor, 600);
+    ctx.join(pool_id, &ctx.investor, 600);
 
     let result = ctx.client.try_execute_pool(&pool_id);
     assert_eq!(result, Err(Ok(Error::TargetNotMet)));
@@ -351,7 +358,7 @@ fn an_executed_pool_does_not_accept_contributions_anymore() {
     let ctx = setup(&env);
     let pool_id = ctx.create_pool(1_000, 100);
     StellarAssetClient::new(&env, &ctx.token_id).mint(&ctx.investor, &10_000);
-    ctx.join(&pool_id, &ctx.investor, 1_000);
+    ctx.join(pool_id, &ctx.investor, 1_000);
     ctx.client.execute_pool(&pool_id);
 
     let result = ctx.client.try_join_pool(&pool_id, &ctx.investor, &1_000);
@@ -367,11 +374,16 @@ fn exit_pool_returns_the_contribution() {
     let pool_id = ctx.create_pool(1_000, 100);
     StellarAssetClient::new(&env, &ctx.token_id).mint(&ctx.investor, &10_000);
 
-    ctx.join(&pool_id, &ctx.investor, 600);
+    ctx.join(pool_id, &ctx.investor, 600);
     assert_eq!(ctx.balance(&ctx.investor), 9_400);
 
     let returned = ctx.client.exit_pool(&pool_id, &ctx.investor);
     assert_eq!(returned, 600);
+    assert_eq!(event_count(&env, "PoolExited"), 1);
+    let data = last_event_data(&env, "PoolExited").unwrap();
+    let (investor, amount): (Address, i128) = data.try_into_val(&env).unwrap();
+    assert_eq!(investor, ctx.investor);
+    assert_eq!(amount, 600);
     assert_eq!(ctx.balance(&ctx.investor), 10_000);
     assert_eq!(ctx.balance(&ctx.contract_id), 0);
     assert_eq!(ctx.client.get_contribution(&pool_id, &ctx.investor), 0);
@@ -380,12 +392,6 @@ fn exit_pool_returns_the_contribution() {
     assert_eq!(pool.total_raised, 0);
     assert_eq!(pool.investor_count, 0);
     assert_eq!(pool.status, PoolStatus::Open);
-
-    assert_eq!(event_count(&env, "PoolExited"), 1);
-    let data = last_event_data(&env, "PoolExited").unwrap();
-    let (investor, amount): (Address, i128) = data.try_into_val(&env).unwrap();
-    assert_eq!(investor, ctx.investor);
-    assert_eq!(amount, 600);
 }
 
 #[test]
@@ -394,7 +400,7 @@ fn exit_pool_after_the_execution_is_rejected() {
     let ctx = setup(&env);
     let pool_id = ctx.create_pool(1_000, 100);
     StellarAssetClient::new(&env, &ctx.token_id).mint(&ctx.investor, &10_000);
-    ctx.join(&pool_id, &ctx.investor, 1_000);
+    ctx.join(pool_id, &ctx.investor, 1_000);
     ctx.client.execute_pool(&pool_id);
 
     let result = ctx.client.try_exit_pool(&pool_id, &ctx.investor);

@@ -2,7 +2,8 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Events as _, Ledger as _},
+    testutils::{Address as _, Ledger as _},
+    token::StellarAssetClient,
     Address, BytesN, Env, Vec,
 };
 
@@ -17,9 +18,12 @@ fn test_partial_settle_pro_rata_and_history() {
 
     let admin = Address::generate(&env);
     let issuer = Address::generate(&env);
-    let token = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let holder1 = Address::generate(&env);
     let holder2 = Address::generate(&env);
+    StellarAssetClient::new(&env, &token).mint(&contract_id, &10_000);
 
     client.initialize(&admin);
 

@@ -12,15 +12,9 @@
 
 extern crate std;
 
-use soroban_sdk::{
-    testutils::{Address as _, Ledger},
-    vec, Address, BytesN, Env,
-};
+use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env};
 
-use crate::{
-    DistributionResult, InvoiceOwed, PayeeClass, SettlementPriorityQueue,
-    SettlementPriorityQueueClient,
-};
+use crate::{InvoiceOwed, PayeeClass, SettlementPriorityQueue, SettlementPriorityQueueClient};
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

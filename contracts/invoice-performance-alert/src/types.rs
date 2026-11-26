@@ -22,11 +22,11 @@ pub enum DataKey {
 #[repr(u32)]
 pub enum RiskType {
     /// The invoice is not fully funded and closes within the next week.
-    Underfunded = 0,
+    Underfunded = 1,
     /// The payment due date has passed without a payment.
-    Overdue = 1,
+    Overdue = 2,
     /// The payment due date is approaching without a payment.
-    DefaultProximity = 2,
+    DefaultProximity = 3,
 }
 
 /// Severity assigned to a risk alert.
@@ -35,11 +35,11 @@ pub enum RiskType {
 #[repr(u32)]
 pub enum Severity {
     /// Low impact risk.
-    Low = 0,
+    Low = 1,
     /// Medium impact risk.
-    Medium = 1,
+    Medium = 2,
     /// High impact risk.
-    High = 2,
+    High = 3,
 }
 
 /// Payment state of an invoice.
@@ -115,7 +115,7 @@ pub struct RiskStatus {
     /// Timestamp of the most recent alert (0 when no alert was emitted).
     pub last_alert_at: u64,
     /// Risk type of the most recent alert.
-    pub last_alert_type: Option<u32>,
+    pub last_alert_type: u32,
     /// Severity of the most recent alert.
-    pub last_severity: Option<u32>,
+    pub last_severity: u32,
 }

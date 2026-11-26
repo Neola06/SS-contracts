@@ -5,8 +5,8 @@ use soroban_sdk::testutils::{Address as _, Events as _, Ledger as _, MockAuth, M
 use soroban_sdk::xdr::{ContractEvent, ContractEventBody, ScVal};
 use soroban_sdk::{Address, Env, IntoVal, Symbol, TryFromVal, Val, Vec};
 
-const START: u64 = 1_000;
 const ONE_DAY: u64 = 86_400;
+const START: u64 = 3 * ONE_DAY;
 
 /// Deployed contract, its actors and the tracked invoice.
 struct Ctx<'a> {
@@ -542,16 +542,16 @@ fn risk_status_reports_the_current_flags_and_the_latest_alert() {
     assert_eq!(status.days_to_close, 5);
     assert_eq!(status.days_to_due, 30);
     assert_eq!(status.last_alert_at, 0);
-    assert_eq!(status.last_alert_type, None);
-    assert_eq!(status.last_severity, None);
+    assert_eq!(status.last_alert_type, 0);
+    assert_eq!(status.last_severity, 0);
 
     assert_eq!(ctx.client.check_invoice_health(&ctx.invoice_id), 1);
 
     let status = ctx.client.get_risk_status(&ctx.invoice_id);
     assert!(status.underfunded);
     assert_eq!(status.last_alert_at, START);
-    assert_eq!(status.last_alert_type, Some(RiskType::Underfunded as u32));
-    assert_eq!(status.last_severity, Some(Severity::Low as u32));
+    assert_eq!(status.last_alert_type, RiskType::Underfunded as u32);
+    assert_eq!(status.last_severity, Severity::Low as u32);
 
     let risk = RiskType::Underfunded;
     let record = ctx.client.get_last_alert(&ctx.invoice_id, &risk);

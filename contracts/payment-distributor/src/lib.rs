@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 #[cfg(test)]
 extern crate alloc;
@@ -155,25 +158,19 @@ fn pro_rata_shares(
     refund_amount: i128,
     weights: &Vec<i128>,
 ) -> Result<Vec<i128>, Error> {
-    if refund_amount <= 0 || weights.is_empty() {
+    if refund_amount <= 0 || weights.is_empty() || weights.iter().any(|weight| weight < 0) {
         return Err(Error::InvalidRefundWeight);
     }
-    let mut total_weight = 0i128;
-    for index in 0..weights.len() {
-        let weight = weights.get(index).ok_or(Error::InvalidRefundWeight)?;
-        if weight < 0 {
-            return Err(Error::InvalidRefundWeight);
-        }
-        total_weight = total_weight.checked_add(weight).ok_or(Error::Overflow)?;
-    }
+    let total_weight = weights.iter().try_fold(0i128, |sum, weight| {
+        sum.checked_add(weight).ok_or(Error::Overflow)
+    })?;
     if total_weight <= 0 {
         return Err(Error::InvalidRefundWeight);
     }
     let mut allocated = 0i128;
     let mut shares = Vec::new(env);
-    for index in 0..weights.len() {
-        let weight = weights.get(index).ok_or(Error::InvalidRefundWeight)?;
-        let share = if index + 1 == weights.len() {
+    for (index, weight) in weights.iter().enumerate() {
+        let share = if (index as u32) + 1 == weights.len() {
             refund_amount
                 .checked_sub(allocated)
                 .ok_or(Error::Overflow)?
@@ -209,8 +206,7 @@ fn fee_split_amounts(
         .ok_or(Error::Overflow)?;
     let mut allocated = referral;
     let mut recipients = Vec::new(env);
-    for index in 0..shares_bps.len() {
-        let share_bps = shares_bps.get(index).ok_or(Error::InvalidSplit)?;
+    for (index, share_bps) in shares_bps.iter().enumerate() {
         let share = if index == 0 {
             0 // Filled with the exact residual after the other shares.
         } else {
@@ -565,6 +561,12 @@ impl PaymentDistributor {
         storage::get_admin(&env).ok_or(Error::NotInit)?;
         escrow_contract.require_auth();
 
+        if let Some(whitelisted) = storage::get_escrow_contract(&env) {
+            if whitelisted != escrow_contract {
+                return Err(Error::UnauthorizedEscrow);
+            }
+        }
+
         if escrow_status != ESCROW_STATUS_REFUNDED {
             return Err(Error::InvalidEscrowStatus);
         }
@@ -600,7 +602,7 @@ impl PaymentDistributor {
                 return Err(Error::InvalidAmount);
             }
 
-            let mut weights: Vec<i128> = Vec::new(&env);
+            let mut weights = Vec::new(&env);
             for i in 0..funder_count {
                 let weight = amounts.get(1 + i).ok_or(Error::InvalidAmount)?;
                 weights.push_back(weight);

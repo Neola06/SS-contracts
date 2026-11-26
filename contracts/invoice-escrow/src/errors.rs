@@ -166,10 +166,10 @@ pub enum Error {
     CollateralReserved = 76,
     /// Payout would consume repayment deposits reserved for another invoice.
     RepaymentReserved = 77,
+    /// The receipt cursor is beyond the number of receipts recorded.
+    InvalidCursor = 78,
+    /// The invoice has reached its retained receipt-history limit.
+    ReceiptLimitReached = 79,
     /// Pending settlement proposal has expired.
-    SettlementProposalExpired = 78,
-    /// The same address appears more than once in the emergency multi-sig admin set.
-    DuplicateEmergencyAdmin = 79,
-    /// The pending settlement proposal has not expired, so it cannot be expired yet.
-    SettlementNotExpired = 80,
+    SettlementProposalExpired = 80,
 }

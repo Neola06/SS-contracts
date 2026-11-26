@@ -103,9 +103,13 @@ pub fn set_pool(env: &Env, pool: &Pool) {
 /// Load the contribution of an investor to a pool.
 pub fn get_position(env: &Env, pool_id: u32, investor: &Address) -> i128 {
     let key = StorageKey::Position(pool_id, investor.clone());
-    let amount: i128 = env.storage().persistent().get(&key).unwrap_or(0);
-    bump(env, &key);
-    amount
+    match env.storage().persistent().get(&key) {
+        Some(amount) => {
+            bump(env, &key);
+            amount
+        }
+        None => 0,
+    }
 }
 
 /// Store the contribution of an investor to a pool.

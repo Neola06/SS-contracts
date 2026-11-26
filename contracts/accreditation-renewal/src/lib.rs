@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -41,6 +44,7 @@ impl AccreditationRenewalContract {
             .instance()
             .get(&DataKey::Operator)
             .ok_or(Error::NotInitialized)?;
+        caller.require_auth();
 
         if caller != admin_addr && caller != operator_addr {
             return Err(Error::Unauthorized);

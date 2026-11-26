@@ -439,12 +439,6 @@ fn distribute_from_snapshot_routes_pro_rata_amounts() {
     // Floored shares: 500, 300, 200 (of 1_001 * 50% / 30% / 20%).
     assert_eq!(distributed, 500 + 300 + 200);
 
-    let client = TokenClient::new(&env, &token);
-    assert_eq!(client.balance(&alice), 500);
-    assert_eq!(client.balance(&bob), 300);
-    assert_eq!(client.balance(&carol), 200);
-    assert_eq!(client.balance(&ctx.admin), 10_000 - 1_000);
-
     let mut found = false;
     for e in env.events().all().events().iter() {
         if topic_of(&env, e) == Symbol::new(&env, "snapshot_distributed") {
@@ -452,6 +446,12 @@ fn distribute_from_snapshot_routes_pro_rata_amounts() {
         }
     }
     assert!(found, "expected snapshot_distributed event");
+
+    let client = TokenClient::new(&env, &token);
+    assert_eq!(client.balance(&alice), 500);
+    assert_eq!(client.balance(&bob), 300);
+    assert_eq!(client.balance(&carol), 200);
+    assert_eq!(client.balance(&ctx.admin), 10_000 - 1_000);
 }
 
 #[test]

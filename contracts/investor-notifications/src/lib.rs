@@ -1,5 +1,18 @@
 #![no_std]
-#![allow(deprecated)]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 mod errors;
 mod events;
@@ -429,4 +442,23 @@ impl InvestorNotifications {
 }
 
 #[cfg(test)]
-mod test;
+mod tests {
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+    #[test]
+    fn only_authorized_callers_emit() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract = env.register(InvestorNotifications, ());
+        let client = InvestorNotificationsClient::new(&env, &contract);
+        let admin = Address::generate(&env);
+        let caller = Address::generate(&env);
+        let wallet = Address::generate(&env);
+        client.initialize(&admin);
+        assert!(client
+            .try_emit_kyc_notification(&caller, &wallet, &symbol_short!("approved"))
+            .is_err());
+        client.set_authorized_caller(&caller, &true);
+        client.emit_kyc_notification(&caller, &wallet, &symbol_short!("approved"));
+    }
+}

@@ -14,6 +14,9 @@
 //! Conservation invariant: `senior_payout + junior_payout + issuer_surplus == settlement_amount`.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -160,33 +163,17 @@ impl InvoiceTrancheContract {
             return Err(Error::InvalidTrancheConfig);
         }
 
-        // Senior tranche repaid first up to filled principal.
-        let senior_payout = settlement_amount.min(config.senior_filled);
-        let remainder = settlement_amount
-            .checked_sub(senior_payout)
-            .ok_or(Error::ArithmeticOverflow)?;
+        let remainder = settlement_amount - senior_payout;
 
-        // Junior tranche receives principal plus configured share of remaining surplus;
-        // any unallocated surplus (including integer-division dust) belongs to the issuer.
-        let (junior_payout, issuer_surplus) = if config.junior_filled == 0 {
-            (0, remainder)
-        } else if remainder > config.junior_filled {
-            let surplus = remainder
-                .checked_sub(config.junior_filled)
-                .ok_or(Error::ArithmeticOverflow)?;
-            let bonus = surplus
-                .checked_mul(premium_bps)
-                .ok_or(Error::ArithmeticOverflow)?
-                .checked_div(BPS_DENOMINATOR)
-                .ok_or(Error::ArithmeticOverflow)?;
-            let junior_total = config
-                .junior_filled
-                .checked_add(bonus)
-                .ok_or(Error::ArithmeticOverflow)?;
-            let residual = surplus
-                .checked_sub(bonus)
-                .ok_or(Error::ArithmeticOverflow)?;
-            (junior_total, residual)
+        // Junior tranche receives remainder with yield premium applied if applicable
+        let junior_payout = if remainder > 0 {
+            if remainder >= config.junior_filled {
+                let surplus = remainder - config.junior_filled;
+                let bonus = (surplus * (config.junior_yield_premium_bps as i128)) / BPS_DENOMINATOR;
+                config.junior_filled + bonus.min(surplus)
+            } else {
+                remainder
+            }
         } else {
             (remainder, 0)
         };

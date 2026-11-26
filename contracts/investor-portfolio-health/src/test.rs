@@ -412,8 +412,8 @@ fn every_portfolio_event_recomputes_the_score() {
         .record_settlement(&ctx.operator, &ctx.wallet, &invoice);
     assert_eq!(score_event_count(&env), 1);
 
-    // The remaining position is worth 59 points on its own.
+    // Settling the final position returns the wallet to an empty healthy portfolio.
     let stored = ctx.client.get_health_score(&ctx.wallet);
-    assert_eq!(stored.score, 59);
-    assert_eq!(stored.factors.position_count, 1);
+    assert_eq!(stored.score, 100);
+    assert_eq!(stored.factors.position_count, 0);
 }

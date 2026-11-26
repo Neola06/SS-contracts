@@ -21,8 +21,8 @@ fn test_consume_nonce_rejects_reuse() {
 
     assert!(!client.is_nonce_used(&wallet, &nonce));
     client.consume_nonce(&wallet, &nonce);
-    assert!(client.is_nonce_used(&wallet, &nonce));
     assert_eq!(env.events().all().events().len(), 1);
+    assert!(client.is_nonce_used(&wallet, &nonce));
 
     let res = client.try_consume_nonce(&wallet, &nonce);
     assert_eq!(res, Err(Ok(Error::NonceAlreadyUsed)));

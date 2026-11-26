@@ -5,6 +5,8 @@
 //! default the stakes absorb the loss pro-rata before investor principal.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
 #![allow(deprecated)]
 
 use soroban_sdk::{

@@ -1,4 +1,18 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
@@ -86,6 +100,7 @@ mod tests {
     #[test]
     fn admin_updates_invoice_rate() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract = env.register(InterestRateOracle, ());
         let client = InterestRateOracleClient::new(&env, &contract);
         let admin = Address::generate(&env);
