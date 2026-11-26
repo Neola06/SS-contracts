@@ -1195,6 +1195,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "invoice-auto-rollover"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 27.0.6",
+]
+
+[[package]]
 name = "invoice-co-investment"
 version = "0.1.0"
 dependencies = [
@@ -1220,7 +1227,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "invoice-greylisting"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 27.0.6",
+]
+
+[[package]]
 name = "invoice-hardship-extension"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 27.0.6",
+]
+
+[[package]]
+name = "invoice-impact-reporting"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk 27.0.6",
