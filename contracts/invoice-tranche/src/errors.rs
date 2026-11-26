@@ -13,4 +13,5 @@ pub enum Error {
     TrancheAlreadyExists = 7,
     TrancheNotFound = 8,
     AlreadySettled = 9,
+    ArithmeticOverflow = 10,
 }

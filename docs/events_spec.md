@@ -249,6 +249,16 @@ This section explicitly identifies which fields are indexed (appear in event top
 | `ExcessRefunded` | `token`, `invoice_id` | `escrow`, `amount` |
 | `role_grant_updated` | `role`, `account` | `granted` |
 
+### `investor-notifications` Delivery Events
+
+| Event Name | Topics | Data Fields |
+|---|---|---|
+| `notification_queued` | `notification_id`, `wallet` | `(notification_type, expires_at_ledger)` |
+| `notification_delivered` | `notification_id`, `provider` | `(external_ref, receipt_hash, delivered_ledger)` |
+| `notification_delivery_failed` | `notification_id` | `(retry_count, next_retry_ledger, reason)` |
+| `notification_retry_exhausted` | `notification_id` | `(retry_count, reason)` |
+| `notification_expired` | `notification_id` | `expired_at_ledger` |
+
 ---
 
 ## Snapshot Testing

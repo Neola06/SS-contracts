@@ -65,9 +65,8 @@ members = [
     "contracts/debtor-exposure-cap",
     "contracts/settlement-priority-queue",
     "contracts/rate-auction",
-    "contracts/invoice-impact-reporting",
-    "contracts/invoice-greylisting",
-    "contracts/invoice-auto-rollover",
+    "contracts/upgrade-registry",
+    "contracts/auditor-attestation",
 ]
 
 [workspace.dependencies]

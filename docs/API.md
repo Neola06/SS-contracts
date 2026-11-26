@@ -191,3 +191,15 @@ StellarSettle follows a structured deprecation lifecycle for public entrypoints:
 - Every removal requires a migration guide and a tracking issue.
 - Legacy calls remain functional through the removal target version.
 - Inventory distinguishes current and deprecated entrypoints via `get_deprecation_records`.
+
+## Investor Notifications Delivery & Retry API
+
+`contracts/investor-notifications` tracks off-chain delivery state with bounded retries and provider receipts:
+
+- `set_delivery_provider(provider, authorized)` (admin-only): Authorizes/revokes a delivery relayer address.
+- `configure_retry_policy(max_retries, retry_delay_ledgers, expiry_ledgers)` (admin-only): Configures retry ceiling, ledger backoff delay, and notification TTL (`expiry_ledgers > 0`).
+- `queue_notification(caller, wallet, notification_type, invoice_id, amount) -> u64`: Authorized caller queues a `Pending` notification with bounded retries and `expires_at_ledger`.
+- `confirm_delivery(provider, notification_id, external_ref, receipt_hash)`: Authorized delivery provider records a non-empty, unique `external_ref` and non-zero `receipt_hash`, transitioning the notification to `Delivered`.
+- `record_delivery_failure(provider, notification_id, reason) -> DeliveryState`: Increments `retry_count`, schedules `next_retry_ledger` when below `max_retries`, or marks retries exhausted once `retry_count >= max_retries`.
+- `expire_notification(notification_id)`: Transitions an undelivered notification past `expires_at_ledger` into the terminal `Expired` state.
+- `get_notification_status(notification_id)` / `get_next_retry(notification_id)` / `get_notification(notification_id)`: Exposes current delivery state (`Pending`, `Delivered`, `Failed`, `Expired`) and next retry ledger.
