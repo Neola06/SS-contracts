@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use soroban_sdk::{Address, Env, Symbol};
 
 /// Emitted when a new syndicate is created.

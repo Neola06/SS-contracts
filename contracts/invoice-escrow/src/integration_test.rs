@@ -1850,16 +1850,15 @@ fn test_integration_set_referral_contract_admin_only() {
     let env = Env::default();
     env.mock_all_auths();
     let ctx = setup(&env, 300, "INVREF7", 0, 0);
+    let referral_id = Address::generate(&env);
 
     let referral_id = env.register(ReferralContract, ());
 
     // Without admin authorization the binding fails.
     env.set_auths(&[]);
-    let result = ctx.escrow.try_set_referral_contract(&referral_id);
-    assert!(result.is_err());
+    assert!(ctx.escrow.try_set_referral_contract(&referral_id).is_err());
     assert!(ctx.escrow.get_config().referral_contract.is_none());
 
-    // With admin auth the binding succeeds.
     env.mock_all_auths();
     ctx.escrow.set_referral_contract(&referral_id);
     assert_eq!(ctx.escrow.get_config().referral_contract, Some(referral_id));

@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -182,7 +183,7 @@ jobs:
         id: pr_sizes
         run: |
           set -euo pipefail
-          echo "sizes<<"EOF" >> "$GITHUB_OUTPUT"
+          echo "sizes<<EOF" >> "$GITHUB_OUTPUT"
           for wasm in target/wasm32v1-none/release/*.wasm; do
             name=$(basename "$wasm" .wasm)
             bytes=$(stat -c%s "$wasm")

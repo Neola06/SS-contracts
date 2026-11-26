@@ -16,5 +16,5 @@ soroban-sdk = { workspace = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 invoice-token = { path = "../invoice-token" }
 payment-distributor = { path = "../payment-distributor" }
-referral = { path = "../referral" }
+
 proptest = { workspace = true }

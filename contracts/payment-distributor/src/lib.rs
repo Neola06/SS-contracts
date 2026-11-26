@@ -247,7 +247,7 @@ fn distribute_split(
     let (referral_amount, allocated) =
         fee_split_amounts(env, amount, &split.shares_bps, split.referral_bps)?;
     let mut rec_amounts: Vec<i128> = Vec::new(env);
-    for amount in allocated {
+    for amount in allocated.iter() {
         rec_amounts.push_back(amount);
     }
     let n = split.recipients.len();

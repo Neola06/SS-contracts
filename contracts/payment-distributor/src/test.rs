@@ -17,6 +17,22 @@ fn test_commitment(env: &Env) -> BytesN<32> {
     BytesN::from_array(env, &[0; 32])
 }
 
+fn sdk_i128_vec(env: &Env, values: &[i128]) -> soroban_sdk::Vec<i128> {
+    let mut result = soroban_sdk::Vec::new(env);
+    for value in values {
+        result.push_back(*value);
+    }
+    result
+}
+
+fn sdk_u32_vec(env: &Env, values: &[u32]) -> soroban_sdk::Vec<u32> {
+    let mut result = soroban_sdk::Vec::new(env);
+    for value in values {
+        result.push_back(*value);
+    }
+    result
+}
+
 struct TestContext<'a> {
     env: Env,
     admin: Address,
@@ -5953,6 +5969,7 @@ fn differential_test_remainder_accounting_exact() {
         }
 
         // Call the internal function
+        let env = Env::default();
         let (referral, recipients) =
             crate::fee_split_amounts(&env, amount, &shares_bps, referral_bps).unwrap();
 

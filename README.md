@@ -1,10 +1,10 @@
 <div align="center">
   <img src="logo.png" alt="StellarSettle Logo" width="200"/>
-  
+
   # StellarSettle Smart Contracts
-  
+
   **Soroban smart contracts powering decentralized invoice financing on Stellar**
-  
+
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![Stellar](https://img.shields.io/badge/Stellar-Soroban-blue)](https://stellar.org)
   [![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=flat&logo=rust&logoColor=white)](https://www.rust-lang.org/)
@@ -131,7 +131,7 @@ See [`.env.example`](.env.example) for the full list of variables and their desc
 bash scripts/cli.sh
 
 # Or run the deploy script directly from the repo root
-bash scripts/deploy.sh
+bash scripts/deploy.sh --confirm
 ```
 
 The script:
@@ -141,6 +141,12 @@ The script:
 4. Calls `initialize` on each contract with the configured arguments
 5. Calls `invoice-escrow.set_payment_distributor(...)` to enable distributor-based payouts
 6. Prints a summary of deployed contract IDs
+
+Both deployment wrappers run `scripts/predeploy_check.py` first. Use
+`bash scripts/deploy.sh --dry-run` or `./scripts/deploy.ps1 -DryRun` for a
+machine-readable, secret-redacted preflight. Real writes require the explicit
+`--confirm` / `-Confirm` flag; the preflight reports the selected network,
+dependency IDs and SHA-256 hashes for every WASM artifact.
 
 ### 3c. Mock payment token (local integration testing)
 
@@ -171,7 +177,7 @@ The mock is publicly mintable, so the script refuses to deploy one to mainnet.
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 # Run from the repo root
-.\scripts\deploy.ps1
+.\scripts\deploy.ps1 -Confirm
 ```
 
 The PowerShell script is functionally equivalent to the Bash script above.
@@ -254,6 +260,3 @@ Updated length checks to use .events().len().
 Adjusted iterator usage for event verification, switching to .events().iter() and .events().rev() as needed.
 Modified event loop logic to work with the new slice‑based API (events_after.get(i)).
 These changes address the compilation errors caused by the breaking API change. Further refactoring may be needed for remaining events.last() and iterator patterns.
-#   C I   t r i g g e r  
- #   C I   t r i g g e r   1 1 / 2 1 / 2 0 2 6   1 8 : 0 0 : 5 3  
- 

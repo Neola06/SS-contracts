@@ -23,7 +23,7 @@ jobs:
       - name: Test secondary market and reserve floors
         run: cargo test --locked -p secondary-market
       - name: Install the validated Stellar build tool
-        run: cargo install stellar-cli --locked --version 26.0.0
+        run: cargo install stellar-cli --locked --version 27.0.0 --no-default-features
       - name: Build deployment artifacts and validate their size and interfaces
         run: bash scripts/build-institutional.sh
       - name: Exercise compiled release WASM with default resource limits

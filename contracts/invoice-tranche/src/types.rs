@@ -19,6 +19,7 @@ pub struct TrancheConfig {
     pub is_settled: bool,
     pub senior_payout: i128,
     pub junior_payout: i128,
+    pub issuer_surplus: i128,
 }
 
 #[contracttype]
@@ -30,6 +31,19 @@ pub struct TrancheStatus {
     pub junior_filled: i128,
     pub junior_yield_premium_bps: u32,
     pub is_settled: bool,
+    pub senior_payout: i128,
+    pub junior_payout: i128,
+    pub issuer_surplus: i128,
+}
+
+/// Complete disposition of `settlement_amount` across senior tranche, junior
+/// tranche, and residual surplus retained for the invoice issuer.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SettlementResult {
+    pub senior_payout: i128,
+    pub junior_payout: i128,
+    pub issuer_surplus: i128,
 }
 
 #[contracttype]
