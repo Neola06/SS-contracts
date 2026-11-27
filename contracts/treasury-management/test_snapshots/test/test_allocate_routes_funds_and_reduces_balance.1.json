@@ -99,6 +99,35 @@
                   },
                   {
                     "key": {
+                      "symbol": "debits"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "map": [
+                            {
+                              "key": {
+                                "symbol": "amount"
+                              },
+                              "val": {
+                                "i128": "300"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "source"
+                              },
+                              "val": {
+                                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "destination"
                     },
                     "val": {
@@ -139,7 +168,64 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "SourceBalance"
+                    "symbol": "SourceAllocated"
+                  },
+                  {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "i128": "300"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 1036800
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "SourceDailyTotal"
+                  },
+                  {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                  },
+                  {
+                    "u64": "0"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "i128": "1000"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 1036800
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "SourceReceived"
                   },
                   {
                     "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
@@ -215,12 +301,36 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "TotalBalance"
+                            "symbol": "LastAllocationLedger"
                           }
                         ]
                       },
                       "val": {
-                        "i128": "700"
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "TotalAllocated"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "i128": "300"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "TotalReceived"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "i128": "1000"
                       }
                     }
                   ]
