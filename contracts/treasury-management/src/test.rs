@@ -191,7 +191,10 @@ mod overflow_edge_case_tests {
         // Test empty purpose string rejection
         #[test]
         fn test_empty_purpose_rejection(
-            purpose in prop_oneof![Just(String::new()), Just("   ".to_string())],
+            purpose in prop_oneof![
+                Just(std::string::String::new()),
+                Just(std::string::String::from("   "))
+            ],
         ) {
             let is_empty = purpose.trim().is_empty();
             if is_empty {
@@ -299,7 +302,7 @@ fn test_receive_fee_attributed_to_source() {
     client.receive_fee(&source_a, &200);
 
     let balance = client.get_treasury_balance();
-    assert_eq!(balance.total, 1700);
+    assert_eq!(balance.available, 1700);
     assert_eq!(balance.sources.len(), 2);
 
     // Find each source's amount regardless of insertion order in the pair
@@ -308,7 +311,7 @@ fn test_receive_fee_attributed_to_source() {
     let mut found_b = None;
     for i in 0..balance.sources.len() {
         let src = balance.sources.get(i).unwrap();
-        let amt = balance.amounts.get(i).unwrap();
+        let amt = balance.available_by_source.get(i).unwrap();
         if src == source_a {
             found_a = Some(amt);
         } else if src == source_b {
@@ -351,7 +354,7 @@ fn test_allocate_routes_funds_and_reduces_balance() {
     );
     assert_eq!(index, 0);
 
-    assert_eq!(client.get_treasury_balance().total, 700);
+    assert_eq!(client.get_treasury_balance().available, 700);
 }
 
 #[test]

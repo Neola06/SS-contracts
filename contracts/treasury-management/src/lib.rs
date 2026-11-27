@@ -3,6 +3,31 @@
 //! Consolidates protocol fee inflows from every fee-collecting contract,
 //! tracks balances per fee source, and lets the admin allocate funds to
 //! platform operations, grants, and reserves with a paginated audit log.
+//!
+//! # Accounting model
+//!
+//! Lifetime inflows and spendable funds are tracked as separate, reconciled
+//! quantities, both treasury-wide and per source:
+//!
+//! - **received**: cumulative fees accepted by `receive_fee`. Never decreases.
+//! - **allocated**: cumulative funds routed out by `allocate`. Never decreases.
+//! - **available**: `received - allocated`, the funds that can still be
+//!   allocated.
+//!
+//! `get_treasury_balance` reports availability only, with a per-source
+//! breakdown that sums exactly to the available total.
+//! `get_treasury_accounting` and `get_source_accounting` report all three
+//! figures. Receiving 100 then allocating 40 reports 100 received, 40
+//! allocated and 60 available.
+//!
+//! # Allocation attribution policy
+//!
+//! Every allocation is debited from source availability in first-receipt
+//! order: the source that first contributed fees is drawn down to zero before
+//! the next source is touched, and so on through the known-sources list.
+//! This is deterministic, needs no rounding, and keeps per-source availability
+//! summing exactly to the treasury total. Each `AllocationRecord` stores the
+//! resulting `debits`. A rejected allocation writes nothing.
 
 #![no_std]
 #![allow(clippy::duplicated_attributes)]
@@ -20,12 +45,20 @@
     clippy::implicit_saturating_sub
 )]
 
+// proptest's macros expand to `format!`/`vec!`, which a `no_std` crate
+// does not have in scope.
+#[cfg(test)]
+#[macro_use]
+extern crate std;
+
 mod errors;
 mod events;
 mod storage;
 mod types;
 
-pub use types::{AllocationRecord, TreasuryBalance};
+pub use types::{
+    AllocationRecord, SourceAccounting, SourceDebit, TreasuryAccounting, TreasuryBalance,
+};
 
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Symbol, Vec};
 
@@ -56,7 +89,8 @@ impl TreasuryManagement {
             return Err(Error::AlreadyInit);
         }
         storage::set_admin(&env, &admin);
-        storage::set_total_balance(&env, 0);
+        storage::set_total_received(&env, 0);
+        storage::set_total_allocated(&env, 0);
         events::initialized(&env, &admin);
         Ok(())
     }
@@ -79,7 +113,7 @@ impl TreasuryManagement {
             return Err(Error::SourceNotApproved);
         }
 
-        let prev_cum = storage::get_source_cumulative_total(&env, &source);
+        let prev_cum = storage::get_source_received(&env, &source);
         let new_cum = prev_cum.checked_add(amount).ok_or(Error::Overflow)?;
         if let Some(cap) = storage::get_source_cap(&env, &source) {
             if new_cum > cap {
@@ -91,12 +125,14 @@ impl TreasuryManagement {
         let ledger_day = env.ledger().timestamp() / 86_400;
         let prev_daily = storage::get_source_daily_total(&env, &source, ledger_day);
         let new_daily = prev_daily.checked_add(amount).ok_or(Error::Overflow)?;
+        let total_received = storage::get_total_received(&env)
+            .checked_add(amount)
+            .ok_or(Error::Overflow)?;
 
-        storage::credit_source(&env, &source, amount);
-        storage::set_source_cumulative_total(&env, &source, new_cum);
+        storage::remember_source(&env, &source);
+        storage::set_source_received(&env, &source, new_cum);
         storage::set_source_daily_total(&env, &source, ledger_day, new_daily);
-        let total = storage::get_total_balance(&env);
-        storage::set_total_balance(&env, total.checked_add(amount).ok_or(Error::Overflow)?);
+        storage::set_total_received(&env, total_received);
 
         events::source_fee_received(&env, &source, amount, new_daily, new_cum);
         events::fee_received(&env, &source, amount);
@@ -156,7 +192,7 @@ impl TreasuryManagement {
     pub fn get_source_totals(env: Env, source: Address, ledger_day: u64) -> (i128, i128) {
         (
             storage::get_source_daily_total(&env, &source, ledger_day),
-            storage::get_source_cumulative_total(&env, &source),
+            storage::get_source_received(&env, &source),
         )
     }
 
@@ -187,8 +223,9 @@ impl TreasuryManagement {
             return Err(Error::InvalidPurpose);
         }
 
-        let total = storage::get_total_balance(&env);
-        if amount > total {
+        let total_received = storage::get_total_received(&env);
+        let total_allocated = storage::get_total_allocated(&env);
+        if amount > total_received - total_allocated {
             return Err(Error::InsufficientBalance);
         }
 
@@ -202,7 +239,14 @@ impl TreasuryManagement {
             }
         }
 
-        storage::set_total_balance(&env, total - amount);
+        // Every check is done before the first write, so a rejected
+        // allocation leaves balances and history untouched.
+        let debits = Self::attribute_allocation(&env, amount)?;
+        for debit in debits.iter() {
+            let allocated = storage::get_source_allocated(&env, &debit.source);
+            storage::set_source_allocated(&env, &debit.source, allocated + debit.amount);
+        }
+        storage::set_total_allocated(&env, total_allocated + amount);
         storage::set_last_allocation_ledger(&env, current_ledger);
 
         let record = AllocationRecord {
@@ -210,6 +254,7 @@ impl TreasuryManagement {
             amount,
             purpose: purpose.clone(),
             timestamp: env.ledger().timestamp(),
+            debits,
         };
         let index = storage::push_allocation(&env, &record);
 
@@ -260,21 +305,46 @@ impl TreasuryManagement {
         }
     }
 
-    /// View: total treasury balance and a per-source breakdown.
+    /// View: funds currently available to allocate, attributed per source.
+    ///
+    /// `available_by_source` sums exactly to `available`. This is not a
+    /// history of inflows; use `get_treasury_accounting` for lifetime
+    /// received and allocated amounts.
     pub fn get_treasury_balance(env: Env) -> TreasuryBalance {
-        let total = storage::get_total_balance(&env);
-        let known_sources = storage::get_known_sources(&env);
         let mut sources = Vec::new(&env);
-        let mut amounts = Vec::new(&env);
-        for source in known_sources.iter() {
-            sources.push_back(source.clone());
-            amounts.push_back(storage::get_source_balance(&env, &source));
+        let mut available_by_source = Vec::new(&env);
+        for source in storage::get_known_sources(&env).iter() {
+            available_by_source.push_back(Self::source_accounting(&env, &source).available);
+            sources.push_back(source);
         }
         TreasuryBalance {
-            total,
+            available: storage::get_total_received(&env) - storage::get_total_allocated(&env),
             sources,
-            amounts,
+            available_by_source,
         }
+    }
+
+    /// View: reconciled lifetime receipts, lifetime allocations and current
+    /// availability, treasury-wide and for every known source.
+    pub fn get_treasury_accounting(env: Env) -> TreasuryAccounting {
+        let total_received = storage::get_total_received(&env);
+        let total_allocated = storage::get_total_allocated(&env);
+        let mut sources = Vec::new(&env);
+        for source in storage::get_known_sources(&env).iter() {
+            sources.push_back(Self::source_accounting(&env, &source));
+        }
+        TreasuryAccounting {
+            total_received,
+            total_allocated,
+            available: total_received - total_allocated,
+            sources,
+        }
+    }
+
+    /// View: lifetime receipts, allocations and availability for one source.
+    /// Unknown sources report zeros.
+    pub fn get_source_accounting(env: Env, source: Address) -> SourceAccounting {
+        Self::source_accounting(&env, &source)
     }
 
     /// View: paginated allocation log, oldest-first within the page.
@@ -308,5 +378,48 @@ impl TreasuryManagement {
     }
 }
 
+impl TreasuryManagement {
+    fn source_accounting(env: &Env, source: &Address) -> SourceAccounting {
+        let received = storage::get_source_received(env, source);
+        let allocated = storage::get_source_allocated(env, source);
+        SourceAccounting {
+            source: source.clone(),
+            received,
+            allocated,
+            available: received - allocated,
+        }
+    }
+
+    /// Split `amount` across source availability in first-receipt order
+    /// (see the module docs). Read-only; the caller applies the debits.
+    fn attribute_allocation(env: &Env, amount: i128) -> Result<Vec<SourceDebit>, Error> {
+        let mut debits = Vec::new(env);
+        let mut remaining = amount;
+        for source in storage::get_known_sources(env).iter() {
+            if remaining == 0 {
+                break;
+            }
+            let available = Self::source_accounting(env, &source).available;
+            if available <= 0 {
+                continue;
+            }
+            let take = remaining.min(available);
+            debits.push_back(SourceDebit {
+                source,
+                amount: take,
+            });
+            remaining -= take;
+        }
+        // Per-source availability always sums to the treasury total, which
+        // the caller has already checked covers `amount`.
+        if remaining != 0 {
+            return Err(Error::InsufficientBalance);
+        }
+        Ok(debits)
+    }
+}
+
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod test_accounting;
