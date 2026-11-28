@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 //! Secondary market contract (#515): fraction holders list fractions for
 //! resale at a set price, and buyers purchase listed fractions atomically.

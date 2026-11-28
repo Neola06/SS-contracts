@@ -4,6 +4,7 @@
 #![allow(deprecated)]
 
 use super::*;
+use core::ops::Deref;
 use soroban_sdk::{
     testutils::{Address as _, Events as _, Ledger as _},
     xdr::{ContractEvent, ContractEventBody, ScAddress, ScVal},
@@ -17,7 +18,43 @@ struct Ctx<'a> {
     signer_b: Address,
     signer_c: Address,
     outsider: Address,
-    ms: MultisigAdminClient<'a>,
+    ms: TestClient<'a>,
+}
+
+struct TestClient<'a> {
+    inner: MultisigAdminClient<'a>,
+}
+
+impl<'a> Deref for TestClient<'a> {
+    type Target = MultisigAdminClient<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl TestClient<'_> {
+    fn propose_action(
+        &self,
+        proposer: &Address,
+        action_type: &ActionType,
+        params: &ActionParams,
+    ) -> u32 {
+        let nonce = self.inner.get_proposer_nonce(proposer);
+        self.inner
+            .propose_action(proposer, action_type, params, &nonce)
+    }
+
+    fn propose_action_with_nonce(
+        &self,
+        proposer: &Address,
+        action_type: &ActionType,
+        params: &ActionParams,
+        nonce: &U256,
+    ) -> u32 {
+        self.inner
+            .propose_action(proposer, action_type, params, nonce)
+    }
 }
 
 fn setup_with_threshold<'a>(env: &'a Env, threshold: u32) -> Ctx<'a> {
@@ -30,7 +67,9 @@ fn setup_with_threshold<'a>(env: &'a Env, threshold: u32) -> Ctx<'a> {
     let outsider = Address::generate(env);
 
     let contract_id = env.register(MultisigAdmin, ());
-    let ms = MultisigAdminClient::new(env, &contract_id);
+    let ms = TestClient {
+        inner: MultisigAdminClient::new(env, &contract_id),
+    };
 
     let mut signers = Vec::new(env);
     signers.push_back(admin.clone());
@@ -192,9 +231,12 @@ fn unauthorized_signers_cannot_propose_or_sign() {
     let env = Env::default();
     let ctx = setup(&env);
 
-    let result = ctx
-        .ms
-        .try_propose_action(&ctx.outsider, &ActionType::FeeChange, &fee_params(100));
+    let result = ctx.ms.try_propose_action(
+        &ctx.outsider,
+        &ActionType::FeeChange,
+        &fee_params(100),
+        &ctx.ms.get_proposer_nonce(&ctx.outsider),
+    );
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
 
     let proposal_id = ctx
@@ -385,8 +427,12 @@ fn signer_set_update_requires_current_threshold_approval() {
 
     // Removed signers can no longer propose.
     assert_eq!(
-        ctx.ms
-            .try_propose_action(&ctx.admin, &ActionType::Pause, &empty_params()),
+        ctx.ms.try_propose_action(
+            &ctx.admin,
+            &ActionType::Pause,
+            &empty_params(),
+            &ctx.ms.get_proposer_nonce(&ctx.admin),
+        ),
         Err(Ok(Error::Unauthorized))
     );
     // New signers can.
@@ -503,27 +549,43 @@ fn invalid_action_params_rejected_at_proposal() {
     let mut wl = empty_params();
     wl.allowed = Some(true);
     assert_eq!(
-        ctx.ms
-            .try_propose_action(&ctx.admin, &ActionType::WhitelistUpdate, &wl),
+        ctx.ms.try_propose_action(
+            &ctx.admin,
+            &ActionType::WhitelistUpdate,
+            &wl,
+            &ctx.ms.get_proposer_nonce(&ctx.admin),
+        ),
         Err(Ok(Error::InvalidActionParams))
     );
 
     // Fee out of range.
     assert_eq!(
-        ctx.ms
-            .try_propose_action(&ctx.admin, &ActionType::FeeChange, &fee_params(10_001)),
+        ctx.ms.try_propose_action(
+            &ctx.admin,
+            &ActionType::FeeChange,
+            &fee_params(10_001),
+            &ctx.ms.get_proposer_nonce(&ctx.admin),
+        ),
         Err(Ok(Error::InvalidActionParams))
     );
     assert_eq!(
-        ctx.ms
-            .try_propose_action(&ctx.admin, &ActionType::FeeChange, &fee_params(-1)),
+        ctx.ms.try_propose_action(
+            &ctx.admin,
+            &ActionType::FeeChange,
+            &fee_params(-1),
+            &ctx.ms.get_proposer_nonce(&ctx.admin),
+        ),
         Err(Ok(Error::InvalidActionParams))
     );
 
     // Settlement trigger without an invoice id.
     assert_eq!(
-        ctx.ms
-            .try_propose_action(&ctx.admin, &ActionType::SettlementTrigger, &empty_params()),
+        ctx.ms.try_propose_action(
+            &ctx.admin,
+            &ActionType::SettlementTrigger,
+            &empty_params(),
+            &ctx.ms.get_proposer_nonce(&ctx.admin),
+        ),
         Err(Ok(Error::InvalidActionParams))
     );
 
@@ -532,7 +594,8 @@ fn invalid_action_params_rejected_at_proposal() {
         ctx.ms.try_propose_action(
             &ctx.admin,
             &ActionType::UpdateSigners,
-            &update_signers_params(&env, &[&d], 0)
+            &update_signers_params(&env, &[&d], 0),
+            &ctx.ms.get_proposer_nonce(&ctx.admin),
         ),
         Err(Ok(Error::InvalidThreshold))
     );
@@ -540,7 +603,8 @@ fn invalid_action_params_rejected_at_proposal() {
         ctx.ms.try_propose_action(
             &ctx.admin,
             &ActionType::UpdateSigners,
-            &update_signers_params(&env, &[&d, &d], 1)
+            &update_signers_params(&env, &[&d, &d], 1),
+            &ctx.ms.get_proposer_nonce(&ctx.admin),
         ),
         Err(Ok(Error::InvalidSignerSet))
     );
@@ -548,7 +612,12 @@ fn invalid_action_params_rejected_at_proposal() {
     // Pause needs no parameters.
     assert!(ctx
         .ms
-        .try_propose_action(&ctx.admin, &ActionType::Pause, &empty_params())
+        .try_propose_action(
+            &ctx.admin,
+            &ActionType::Pause,
+            &empty_params(),
+            &ctx.ms.get_proposer_nonce(&ctx.admin),
+        )
         .is_ok());
 }
 
@@ -629,7 +698,7 @@ fn proposal_count_and_fields_track_created_proposals() {
     let ctx = setup(&env);
     assert_eq!(ctx.ms.proposal_count(), 0);
 
-    let proposal_id = ctx.ms.propose_action(
+    let proposal_id = ctx.ms.propose_action_with_nonce(
         &ctx.admin,
         &ActionType::FeeChange,
         &fee_params(200),
@@ -650,7 +719,7 @@ fn proposal_count_and_fields_track_created_proposals() {
     assert_eq!(proposal.nonce, U256::from_u32(&env, 1));
 
     // Ids are sequential.
-    let second = ctx.ms.propose_action(
+    let second = ctx.ms.propose_action_with_nonce(
         &ctx.admin,
         &ActionType::Pause,
         &empty_params(),
@@ -669,7 +738,7 @@ fn nonce_starts_at_one_and_increments() {
 
     // First proposal for admin should require nonce = 1
     let nonce1 = U256::from_u32(&env, 1);
-    let id1 = ctx.ms.propose_action(
+    let id1 = ctx.ms.propose_action_with_nonce(
         &ctx.admin,
         &ActionType::FeeChange,
         &fee_params(100),
@@ -683,9 +752,9 @@ fn nonce_starts_at_one_and_increments() {
 
     // Second proposal for same proposer should require nonce = 2
     let nonce2 = U256::from_u32(&env, 2);
-    let id2 = ctx
-        .ms
-        .propose_action(&ctx.admin, &ActionType::Pause, &empty_params(), &nonce2);
+    let id2 =
+        ctx.ms
+            .propose_action_with_nonce(&ctx.admin, &ActionType::Pause, &empty_params(), &nonce2);
     assert_eq!(id2, 2);
     assert_eq!(
         ctx.ms.get_proposer_nonce(&ctx.admin),
@@ -694,9 +763,12 @@ fn nonce_starts_at_one_and_increments() {
 
     // Different proposer starts at 1
     let nonce_b = U256::from_u32(&env, 1);
-    let id3 = ctx
-        .ms
-        .propose_action(&ctx.signer_b, &ActionType::Pause, &empty_params(), &nonce_b);
+    let id3 = ctx.ms.propose_action_with_nonce(
+        &ctx.signer_b,
+        &ActionType::Pause,
+        &empty_params(),
+        &nonce_b,
+    );
     assert_eq!(id3, 3);
     assert_eq!(
         ctx.ms.get_proposer_nonce(&ctx.signer_b),
@@ -710,7 +782,7 @@ fn stale_nonce_rejected() {
     let ctx = setup(&env);
 
     // Submit first proposal with nonce = 1
-    let _ = ctx.ms.propose_action(
+    let _ = ctx.ms.propose_action_with_nonce(
         &ctx.admin,
         &ActionType::FeeChange,
         &fee_params(100),
@@ -748,7 +820,7 @@ fn duplicate_nonce_rejected() {
     let ctx = setup(&env);
 
     // Submit first proposal with nonce = 1
-    let _ = ctx.ms.propose_action(
+    let _ = ctx.ms.propose_action_with_nonce(
         &ctx.admin,
         &ActionType::FeeChange,
         &fee_params(100),
@@ -767,18 +839,18 @@ fn nonce_view_function_works() {
     let env = Env::default();
     let ctx = setup(&env);
 
-    // Before any proposals, nonce is 0
+    // Before any proposals, nonce starts at 1.
     assert_eq!(
         ctx.ms.get_proposer_nonce(&ctx.admin),
-        U256::from_u32(&env, 0)
+        U256::from_u32(&env, 1)
     );
     assert_eq!(
         ctx.ms.get_proposer_nonce(&ctx.signer_b),
-        U256::from_u32(&env, 0)
+        U256::from_u32(&env, 1)
     );
 
     // After one proposal, nonce advances
-    let _ = ctx.ms.propose_action(
+    let _ = ctx.ms.propose_action_with_nonce(
         &ctx.admin,
         &ActionType::FeeChange,
         &fee_params(100),
@@ -790,6 +862,6 @@ fn nonce_view_function_works() {
     );
     assert_eq!(
         ctx.ms.get_proposer_nonce(&ctx.signer_b),
-        U256::from_u32(&env, 0)
+        U256::from_u32(&env, 1)
     );
 }

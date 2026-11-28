@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, token, Address, BytesN, Env, Symbol,
@@ -177,17 +180,17 @@ impl StakingRewards {
         if amount <= 0 {
             return Err(Error::InvalidAmount);
         }
+        token::Client::new(&env, &invoice.token).transfer(
+            &invoice.issuer,
+            env.current_contract_address(),
+            &amount,
+        );
         let pool: i128 = env
             .storage()
             .persistent()
             .get(&DataKey::Pool(invoice_id.clone()))
             .unwrap_or(0);
         let new_pool = pool.checked_add(amount).ok_or(Error::Overflow)?;
-        token::Client::new(&env, &invoice.token).transfer(
-            &invoice.issuer,
-            &env.current_contract_address(),
-            &amount,
-        );
         env.storage()
             .persistent()
             .set(&DataKey::Pool(invoice_id), &new_pool);
@@ -213,6 +216,11 @@ impl StakingRewards {
         if lock_period == 0 {
             return Err(Error::InvalidLock);
         }
+        token::Client::new(&env, &invoice.token).transfer(
+            &wallet,
+            env.current_contract_address(),
+            &amount,
+        );
         let now = env.ledger().timestamp();
         let unlock_at = now.checked_add(lock_period).ok_or(Error::Overflow)?;
         let id: u64 = env
@@ -228,11 +236,6 @@ impl StakingRewards {
             .unwrap_or(0);
         let new_total = total_staked.checked_add(amount).ok_or(Error::Overflow)?;
 
-        token::Client::new(&env, &invoice.token).transfer(
-            &wallet,
-            &env.current_contract_address(),
-            &amount,
-        );
         env.storage().instance().set(&DataKey::NextStake, &next_id);
         env.storage().persistent().set(
             &DataKey::Stake(id),

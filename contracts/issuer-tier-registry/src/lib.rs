@@ -8,6 +8,8 @@
 //! enforce the tier's `max_invoice_value` and `max_open_exposure`.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
 #![allow(deprecated)]
 
 use soroban_sdk::{

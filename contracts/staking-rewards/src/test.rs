@@ -1,5 +1,5 @@
 use soroban_sdk::{
-    testutils::Address as _,
+    testutils::{Address as _, Ledger as _},
     token::{Client as TokenClient, StellarAssetClient},
     Address, BytesN, Env,
 };
@@ -55,7 +55,7 @@ fn setup() -> Setup {
 }
 
 fn set_timestamp(env: &Env, timestamp: u64) {
-    env.ledger().with_mut(|ledger| ledger.timestamp = timestamp);
+    env.ledger().set_timestamp(timestamp);
 }
 
 #[test]

@@ -12,7 +12,7 @@ fn setup() -> (Env, SecondaryCooldownClient<'static>, Address) {
     let contract_id = env.register_contract(None, SecondaryCooldown);
     let client = SecondaryCooldownClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
-    client.initialize(&admin).unwrap();
+    client.initialize(&admin);
     (env, client, admin)
 }
 
@@ -25,7 +25,7 @@ fn test_buy_without_cooldown_succeeds() {
     let (env, client, _admin) = setup();
     let buyer = Address::generate(&env);
     let invoice = inv(&env);
-    client.record_buy(&buyer, &invoice).unwrap();
+    client.record_buy(&buyer, &invoice);
 }
 
 #[test]
@@ -34,12 +34,12 @@ fn test_cooldown_blocks_immediate_rebuy() {
     let buyer = Address::generate(&env);
     let invoice = inv(&env);
 
-    client.set_secondary_cooldown(&invoice, &3600).unwrap();
-    client.record_buy(&buyer, &invoice).unwrap();
+    client.set_secondary_cooldown(&invoice, &3600);
+    client.record_buy(&buyer, &invoice);
 
     // Immediate second buy should fail.
     assert_eq!(
-        client.record_buy(&buyer, &invoice),
+        client.try_record_buy(&buyer, &invoice),
         Err(Ok(Error::CooldownActive))
     );
 }
@@ -50,12 +50,12 @@ fn test_cooldown_expires_correctly() {
     let buyer = Address::generate(&env);
     let invoice = inv(&env);
 
-    client.set_secondary_cooldown(&invoice, &3600).unwrap();
-    client.record_buy(&buyer, &invoice).unwrap();
+    client.set_secondary_cooldown(&invoice, &3600);
+    client.record_buy(&buyer, &invoice);
 
     // Advance past cooldown.
     env.ledger().with_mut(|l| l.timestamp += 3601);
-    client.record_buy(&buyer, &invoice).unwrap();
+    client.record_buy(&buyer, &invoice);
 }
 
 #[test]
@@ -65,11 +65,11 @@ fn test_cooldown_independent_per_wallet() {
     let buyer2 = Address::generate(&env);
     let invoice = inv(&env);
 
-    client.set_secondary_cooldown(&invoice, &3600).unwrap();
-    client.record_buy(&buyer1, &invoice).unwrap();
+    client.set_secondary_cooldown(&invoice, &3600);
+    client.record_buy(&buyer1, &invoice);
 
     // buyer2 has not bought yet, so they are not blocked.
-    client.record_buy(&buyer2, &invoice).unwrap();
+    client.record_buy(&buyer2, &invoice);
 }
 
 #[test]
@@ -78,10 +78,10 @@ fn test_get_cooldown_remaining() {
     let buyer = Address::generate(&env);
     let invoice = inv(&env);
 
-    client.set_secondary_cooldown(&invoice, &3600).unwrap();
+    client.set_secondary_cooldown(&invoice, &3600);
     assert_eq!(client.get_secondary_cooldown_remaining(&buyer, &invoice), 0);
 
-    client.record_buy(&buyer, &invoice).unwrap();
+    client.record_buy(&buyer, &invoice);
     let remaining = client.get_secondary_cooldown_remaining(&buyer, &invoice);
     assert!(remaining > 0 && remaining <= 3600);
 }

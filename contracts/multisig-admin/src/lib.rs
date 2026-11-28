@@ -17,6 +17,20 @@
 //! Stale, future, or duplicate nonces are rejected.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(
+    deprecated,
+    unused_variables,
+    unused_mut,
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::needless_borrows_for_generic_args,
+    clippy::len_zero,
+    clippy::collapsible_if,
+    clippy::unnecessary_cast,
+    clippy::implicit_saturating_sub
+)]
 
 mod errors;
 mod events;
@@ -287,7 +301,6 @@ impl MultisigAdmin {
     }
 
     /// Return the next expected nonce for a proposer (starts at 1).
-    /// Returns 0 if the proposer has never submitted a proposal.
     pub fn get_proposer_nonce(env: Env, proposer: Address) -> U256 {
         storage::get_proposer_nonce(&env, &proposer)
     }

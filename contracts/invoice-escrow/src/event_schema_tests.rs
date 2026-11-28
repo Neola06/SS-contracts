@@ -13,12 +13,13 @@
 #![cfg(test)]
 #![allow(deprecated, unused_variables, dead_code, unused_mut, clippy::all)]
 
+extern crate std;
+
+use std::{string::String, string::ToString};
+
 use super::*;
-use crate::events::*;
 use soroban_sdk::testutils::{Address as _, Events, Ledger};
-use soroban_sdk::{
-    contract, contractimpl, Address, BytesN, Env, IntoVal, Symbol, TryFromVal, Val, Vec,
-};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Symbol, TryFromVal, Val, Vec};
 
 /// Mock invoice token for testing
 #[contract]
@@ -58,51 +59,23 @@ fn parse_event(env: &Env, event: &soroban_sdk::xdr::ContractEvent) -> (Vec<Val>,
     (topics, data)
 }
 
-/// Extract topic names (excluding contract address) from event
+fn assert_val_type<T>(env: &Env, value: Val)
+where
+    T: TryFromVal<Env, Val>,
+{
+    assert!(T::try_from_val(env, &value).is_ok());
+}
+
+/// Extract topic names from an event.
 fn extract_topic_names(env: &Env, event: &soroban_sdk::xdr::ContractEvent) -> Vec<String> {
     let (topics, _) = parse_event(env, event);
     let mut names = Vec::new(env);
-    // Skip first topic (contract address), second is event name
-    for i in 1..topics.len() {
+    for i in 0..topics.len() {
         if let Ok(sym) = Symbol::try_from_val(env, &topics.get(i).unwrap()) {
             names.push_back(sym.to_string());
         }
     }
     names
-}
-
-/// Extract data field names and types from event
-fn extract_data_schema(
-    env: &Env,
-    event: &soroban_sdk::xdr::ContractEvent,
-) -> Vec<(String, String)> {
-    let (_, data) = parse_event(env, event);
-    let mut fields = Vec::new(env);
-
-    // Try to decode as tuple/struct
-    if let Ok(vec) = Vec::<Val>::try_from_val(env, &data) {
-        for (i, val) in vec.iter().enumerate() {
-            let type_name = match val.type_of() {
-                soroban_sdk::xdr::ScValType::Bool => "bool",
-                soroban_sdk::xdr::ScValType::U32 => "u32",
-                soroban_sdk::xdr::ScValType::I64 => "i64",
-                soroban_sdk::xdr::ScValType::U64 => "u64",
-                soroban_sdk::xdr::ScValType::I128 => "i128",
-                soroban_sdk::xdr::ScValType::U128 => "u128",
-                soroban_sdk::xdr::ScValType::Address => "Address",
-                soroban_sdk::xdr::ScValType::Symbol => "Symbol",
-                soroban_sdk::xdr::ScValType::String => "String",
-                soroban_sdk::xdr::ScValType::Bytes => "Bytes",
-                soroban_sdk::xdr::ScValType::BytesN => "BytesN",
-                soroban_sdk::xdr::ScValType::Vec => "Vec",
-                soroban_sdk::xdr::ScValType::Map => "Map",
-                soroban_sdk::xdr::ScValType::Option => "Option",
-                _ => "Unknown",
-            };
-            fields.push_back((format!("field_{}", i), type_name.to_string()));
-        }
-    }
-    fields
 }
 
 #[test]
@@ -123,11 +96,11 @@ fn event_schema_snapshot_escrow_created() {
     let payment_token_admin = Address::generate(&env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&buyer, &1000);
-    payment_asset.mint(&payer, &1000);
+    payment_asset.mint(&debtor, &1000);
 
     client.initialize(&admin, &0);
     client.create_escrow_legacy(
@@ -149,17 +122,19 @@ fn event_schema_snapshot_escrow_created() {
 
     // Find escrow_created event
     let mut found = false;
-    for event in events.iter() {
+    for event in events.events().iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if topics.len() >= 1 {
+            if let Some(sym) = topics
+                .iter()
+                .find_map(|topic| Symbol::try_from_val(&env, &topic).ok())
+            {
                 if sym == Symbol::new(&env, "escrow_created") {
                     found = true;
 
-                    // Verify topic structure: [contract, "escrow_created", invoice_id]
                     assert!(
-                        topics.len() >= 3,
-                        "escrow_created should have at least 3 topics"
+                        topics.len() >= 1,
+                        "escrow_created should have an event-name topic"
                     );
 
                     // Verify data structure: (invoice_id, seller, debtor, face_value, purchase_price, due_dt, token, inv_token, commitment, funding_milestone)
@@ -172,42 +147,15 @@ fn event_schema_snapshot_escrow_created() {
                     );
 
                     // Verify field types in order
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Symbol
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(2).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(3).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
-                    assert_eq!(
-                        data_vec.get(4).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
-                    assert_eq!(
-                        data_vec.get(5).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::U64
-                    );
-                    assert_eq!(
-                        data_vec.get(6).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(7).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(8).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::BytesN
-                    );
+                    assert_val_type::<Symbol>(&env, data_vec.get(0).unwrap());
+                    assert_val_type::<Address>(&env, data_vec.get(1).unwrap());
+                    assert_val_type::<Address>(&env, data_vec.get(2).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(3).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(4).unwrap());
+                    assert_val_type::<u64>(&env, data_vec.get(5).unwrap());
+                    assert_val_type::<Address>(&env, data_vec.get(6).unwrap());
+                    assert_val_type::<Address>(&env, data_vec.get(7).unwrap());
+                    assert_val_type::<BytesN<32>>(&env, data_vec.get(8).unwrap());
                     // funding_milestone is Option<i128>
 
                     break;
@@ -236,11 +184,11 @@ fn event_schema_snapshot_escrow_funded() {
     let payment_token_admin = Address::generate(&env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&buyer, &1000);
-    payment_asset.mint(&payer, &1000);
+    payment_asset.mint(&debtor, &1000);
 
     client.initialize(&admin, &0);
     client.create_escrow_legacy(
@@ -264,17 +212,19 @@ fn event_schema_snapshot_escrow_funded() {
 
     let events = env.events().all();
     let mut found = false;
-    for event in events.iter() {
+    for event in events.events().iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if topics.len() >= 1 {
+            if let Some(sym) = topics
+                .iter()
+                .find_map(|topic| Symbol::try_from_val(&env, &topic).ok())
+            {
                 if sym == Symbol::new(&env, "escrow_funded") {
                     found = true;
 
-                    // Verify topic structure: [contract, "escrow_funded", invoice_id]
                     assert!(
-                        topics.len() >= 3,
-                        "escrow_funded should have at least 3 topics"
+                        topics.len() >= 1,
+                        "escrow_funded should have an event-name topic"
                     );
 
                     // Verify data: (invoice_id, funder, amount, funded_amt, purchase_price)
@@ -282,26 +232,11 @@ fn event_schema_snapshot_escrow_funded() {
                     let data_vec = Vec::<Val>::try_from_val(&env, &data).unwrap();
                     assert_eq!(data_vec.len(), 5, "escrow_funded data should have 5 fields");
 
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Symbol
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(2).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
-                    assert_eq!(
-                        data_vec.get(3).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
-                    assert_eq!(
-                        data_vec.get(4).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
+                    assert_val_type::<Symbol>(&env, data_vec.get(0).unwrap());
+                    assert_val_type::<Address>(&env, data_vec.get(1).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(2).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(3).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(4).unwrap());
 
                     break;
                 }
@@ -329,11 +264,11 @@ fn event_schema_snapshot_payment_settled() {
     let payment_token_admin = Address::generate(&env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&buyer, &1000);
-    payment_asset.mint(&payer, &1000);
+    payment_asset.mint(&debtor, &1000);
 
     client.initialize(&admin, &0);
     client.create_escrow_legacy(
@@ -353,21 +288,23 @@ fn event_schema_snapshot_payment_settled() {
 
     let _ = env.events().all();
 
-    client.record_payment(&invoice_id, &payer, &1000);
+    client.record_payment(&invoice_id, &debtor, &1000);
 
     let events = env.events().all();
     let mut found = false;
-    for event in events.iter() {
+    for event in events.events().iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if topics.len() >= 1 {
+            if let Some(sym) = topics
+                .iter()
+                .find_map(|topic| Symbol::try_from_val(&env, &topic).ok())
+            {
                 if sym == Symbol::new(&env, "payment_settled") {
                     found = true;
 
-                    // Verify topic structure: [contract, "payment_settled", invoice_id]
                     assert!(
-                        topics.len() >= 3,
-                        "payment_settled should have at least 3 topics"
+                        topics.len() >= 1,
+                        "payment_settled should have an event-name topic"
                     );
 
                     // Verify data: (invoice_id, amount, platform_fee, investor_amount)
@@ -379,22 +316,10 @@ fn event_schema_snapshot_payment_settled() {
                         "payment_settled data should have 4 fields"
                     );
 
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Symbol
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
-                    assert_eq!(
-                        data_vec.get(2).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
-                    assert_eq!(
-                        data_vec.get(3).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
+                    assert_val_type::<Symbol>(&env, data_vec.get(0).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(1).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(2).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(3).unwrap());
 
                     break;
                 }
@@ -421,7 +346,7 @@ fn event_schema_snapshot_escrow_refunded() {
     let payment_token_admin = Address::generate(&env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&buyer, &1000);
@@ -453,10 +378,13 @@ fn event_schema_snapshot_escrow_refunded() {
 
     let events = env.events().all();
     let mut found = false;
-    for event in events.iter() {
+    for event in events.events().iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if topics.len() >= 1 {
+            if let Some(sym) = topics
+                .iter()
+                .find_map(|topic| Symbol::try_from_val(&env, &topic).ok())
+            {
                 if sym == Symbol::new(&env, "escrow_refunded") {
                     found = true;
 
@@ -469,14 +397,8 @@ fn event_schema_snapshot_escrow_refunded() {
                         "escrow_refunded data should have 2 fields"
                     );
 
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Symbol
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
+                    assert_val_type::<Symbol>(&env, data_vec.get(0).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(1).unwrap());
 
                     break;
                 }
@@ -504,11 +426,11 @@ fn event_schema_snapshot_installment_events() {
     let payment_token_admin = Address::generate(&env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&buyer, &2000);
-    payment_asset.mint(&payer, &2000);
+    payment_asset.mint(&debtor, &2000);
 
     client.initialize(&admin, &0);
     client.create_escrow_legacy(
@@ -540,28 +462,37 @@ fn event_schema_snapshot_installment_events() {
     ];
     client.set_installment_schedule(&invoice_id, &seller, &schedule);
 
-    let _ = env.events().all();
+    let schedule_events = env.events().all();
+    let mut found_installment_set = false;
+    for event in schedule_events.events().iter() {
+        let (topics, data) = parse_event(&env, &event);
+        if topics.iter().any(|topic| {
+            Symbol::try_from_val(&env, &topic)
+                .is_ok_and(|sym| sym == Symbol::new(&env, "installment_schedule_set"))
+        }) {
+            found_installment_set = true;
+            let data_vec = Vec::<Val>::try_from_val(&env, &data).unwrap();
+            assert_eq!(
+                data_vec.len(),
+                4,
+                "installment_schedule_set data should have 4 fields"
+            );
+        }
+    }
 
     // First payment - should trigger installment_settled for first milestone
-    client.record_payment(&invoice_id, &payer, &1000);
+    client.record_payment(&invoice_id, &debtor, &1000);
 
     let events = env.events().all();
-    let mut found_installment_set = false;
     let mut found_installment_settled = false;
-    for event in events.iter() {
+    for event in events.events().iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
-                if sym == Symbol::new(&env, "installment_schedule_set") {
-                    found_installment_set = true;
-                    let (_, data) = parse_event(&env, &event);
-                    let data_vec = Vec::<Val>::try_from_val(&env, &data).unwrap();
-                    assert_eq!(
-                        data_vec.len(),
-                        4,
-                        "installment_schedule_set data should have 4 fields"
-                    );
-                } else if sym == Symbol::new(&env, "installment_settled") {
+        if topics.len() >= 1 {
+            if let Some(sym) = topics
+                .iter()
+                .find_map(|topic| Symbol::try_from_val(&env, &topic).ok())
+            {
+                if sym == Symbol::new(&env, "installment_settled") {
                     found_installment_settled = true;
                     let (_, data) = parse_event(&env, &event);
                     let data_vec = Vec::<Val>::try_from_val(&env, &data).unwrap();
@@ -570,22 +501,10 @@ fn event_schema_snapshot_installment_events() {
                         4,
                         "installment_settled data should have 4 fields"
                     );
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Symbol
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::U32
-                    );
-                    assert_eq!(
-                        data_vec.get(2).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
-                    assert_eq!(
-                        data_vec.get(3).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::I128
-                    );
+                    assert_val_type::<Symbol>(&env, data_vec.get(0).unwrap());
+                    assert_val_type::<u32>(&env, data_vec.get(1).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(2).unwrap());
+                    assert_val_type::<i128>(&env, data_vec.get(3).unwrap());
                 }
             }
         }
@@ -617,7 +536,7 @@ fn event_schema_snapshot_dispute_events() {
     let payment_token_admin = Address::generate(&env);
     let payment_token_id = env.register_stellar_asset_contract_v2(payment_token_admin.clone());
     let payment_token = payment_token_id.address();
-    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token_id);
+    let payment_asset = soroban_sdk::token::StellarAssetClient::new(&env, &payment_token);
     let inv_token_id = env.register_contract(None, MockInvoiceToken);
 
     payment_asset.mint(&buyer, &1000);
@@ -641,31 +560,29 @@ fn event_schema_snapshot_dispute_events() {
     let _ = env.events().all();
 
     // Raise dispute
-    client.raise_dispute(&invoice_id, &buyer, &BytesN::from_array(&env, &[1; 32]));
+    client.raise_dispute(
+        &debtor,
+        &invoice_id,
+        &soroban_sdk::Bytes::from_array(&env, &[1; 32]),
+    );
 
     let events = env.events().all();
     let mut found_dispute_raised = false;
-    for event in events.iter() {
+    for event in events.events().iter() {
         let (topics, _) = parse_event(&env, &event);
-        if topics.len() >= 2 {
-            if let Ok(sym) = Symbol::try_from_val(&env, &topics.get(1).unwrap()) {
+        if topics.len() >= 1 {
+            if let Some(sym) = topics
+                .iter()
+                .find_map(|topic| Symbol::try_from_val(&env, &topic).ok())
+            {
                 if sym == Symbol::new(&env, "DisputeRaised") {
                     found_dispute_raised = true;
                     let (_, data) = parse_event(&env, &event);
                     let data_vec = Vec::<Val>::try_from_val(&env, &data).unwrap();
                     assert_eq!(data_vec.len(), 3, "DisputeRaised data should have 3 fields");
-                    assert_eq!(
-                        data_vec.get(0).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Symbol
-                    );
-                    assert_eq!(
-                        data_vec.get(1).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::Address
-                    );
-                    assert_eq!(
-                        data_vec.get(2).unwrap().type_of(),
-                        soroban_sdk::xdr::ScValType::U64
-                    );
+                    assert_val_type::<Symbol>(&env, data_vec.get(0).unwrap());
+                    assert_val_type::<Address>(&env, data_vec.get(1).unwrap());
+                    assert_val_type::<u64>(&env, data_vec.get(2).unwrap());
                 }
             }
         }

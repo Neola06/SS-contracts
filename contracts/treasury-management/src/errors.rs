@@ -17,7 +17,8 @@ pub enum Error {
     InvalidAddress = 4,
     /// amount must be strictly positive.
     InvalidAmount = 5,
-    /// allocate requested more than the current total balance.
+    /// allocate requested more than the currently available balance
+    /// (lifetime received minus lifetime allocated).
     InsufficientBalance = 6,
     /// purpose string must not be empty.
     InvalidPurpose = 7,

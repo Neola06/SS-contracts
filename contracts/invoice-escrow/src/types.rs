@@ -49,10 +49,20 @@ pub enum StorageKey {
     BuyLimit(soroban_sdk::BytesN<32>),
     /// Persistent: a wallet's current buy-limit window by (invoice_id, wallet).
     BuyWindow(soroban_sdk::BytesN<32>, soroban_sdk::Address),
+    /// Persistent: one append-only payment receipt by invoice and sequence.
+    PaymentReceipt(soroban_sdk::Symbol, u32),
+    /// Persistent: count of payment receipts retained for an invoice.
+    PaymentReceiptCount(soroban_sdk::Symbol),
     /// Instance: FX oracle contract used to normalise foreign-currency investments.
     FxOracle,
     /// Instance: payment token for a supported investment currency.
     Currency(soroban_sdk::Symbol),
+    /// Instance: maximum accepted age for an FX quote in seconds.
+    CurrencyMaxAge(soroban_sdk::Symbol),
+    /// Instance: settlement-proposal expiry in ledgers.
+    SettleTtl,
+    /// Persistent: settlement-proposal expiry ledger by invoice id.
+    SettleExp(soroban_sdk::BytesN<32>),
     /// Persistent: multi-currency investment records by (invoice_id, investor).
     InvestRecords(soroban_sdk::BytesN<32>, soroban_sdk::Address),
     InvoiceCap(soroban_sdk::BytesN<32>),
@@ -69,42 +79,6 @@ pub enum StorageKey {
     AllocStrat(soroban_sdk::BytesN<32>),
     /// Persistent: funded allocation per (invoice_id, investor).
     FundAlloc(soroban_sdk::BytesN<32>, soroban_sdk::Address),
-    /// Persistent: ledger expiry for a pending settlement proposal.
-    SettleExp(soroban_sdk::BytesN<32>),
-    /// Instance: default TTL ledgers for pending settlement proposals.
-    SettleTtl,
-    /// Persistent: formal fee snapshot per invoice.
-    FeeSnap(soroban_sdk::BytesN<32>),
-    /// Instance: total number of fee snapshots recorded.
-    FeeSnapCnt,
-    /// Instance: maximum FX quote age for a currency.
-    CurrencyMaxAge(soroban_sdk::Symbol),
-    /// Instance: generation of the active emergency multi-sig configuration. Bumped on every
-    /// `set_emergency_config`, so approvals made under an older configuration stop counting.
-    EmergencyGeneration,
-    /// Persistent: emergency-configuration generation that an invoice's approvals belong to.
-    EmergencyApprovalGen(soroban_sdk::Symbol),
-}
-
-/// Status and expiry details for a pending settlement proposal.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SettlementProposalStatus {
-    pub proposer: soroban_sdk::Address,
-    pub repayment_amount: i128,
-    pub expires_at_ledger: u32,
-    pub remaining_ttl: u32,
-    pub expired: bool,
-}
-
-/// Fee configuration captured for an invoice.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FeeSnapshot {
-    pub category_fee_bps: u32,
-    pub platform_fee_bps: u32,
-    pub distributor_fee_bps: u32,
-    pub effective_fee_bps: u32,
 }
 
 /// Bounded allocation strategy for invoice funding fills.
@@ -339,16 +313,6 @@ pub struct SettlementProposal {
     pub repayment_amount: i128,
 }
 
-/// A pending settlement proposal plus the last ledger on which it can still be approved.
-/// Approval is allowed while `ledger.sequence() <= expires_at_ledger`.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PendingSettlement {
-    pub proposer: soroban_sdk::Address,
-    pub repayment_amount: i128,
-    pub expires_at_ledger: u32,
-}
-
 /// Status for BytesN<32> funding invoices (position management).
 #[contracttype]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -403,6 +367,27 @@ pub struct FundingStatus {
     /// Percentage of the funding target filled, in basis points
     /// (10_000 = 100%). Capped at 10_000 when the target is exceeded.
     pub percent_filled_bps: u32,
+}
+
+/// One payment applied to an escrow invoice.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PaymentReceipt {
+    pub invoice_id: soroban_sdk::Symbol,
+    pub payer: soroban_sdk::Address,
+    pub amount: i128,
+    pub ledger_timestamp: u64,
+    pub sequence: u32,
+}
+
+/// Bounded page of append-only payment receipts.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PaymentReceiptPage {
+    pub receipts: soroban_sdk::Vec<PaymentReceipt>,
+    /// Cursor to pass to the next query; equals the last returned sequence.
+    pub next_cursor: u32,
+    pub total_count: u32,
 }
 /// Multi-signature configuration for emergency releases.
 #[contracttype]

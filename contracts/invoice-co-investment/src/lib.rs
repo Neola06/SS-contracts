@@ -13,6 +13,9 @@
 //!      `cancel_syndicate` to return uncommitted funds.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;

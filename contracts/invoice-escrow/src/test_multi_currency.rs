@@ -150,15 +150,17 @@ fn stale_oracle_rate_is_rejected() {
         &8,
         &(NOW + OraclePriceAdapter::DEFAULT_MAX_STALENESS_SECS + 1),
     );
-    assert!(f
-        .client
-        .try_invest_with_currency(
-            &f.invoice_id,
-            &investor,
-            &100_000,
-            &Symbol::new(&f.env, "EURC"),
-        )
-        .is_ok());
+    let refreshed = f.client.try_invest_with_currency(
+        &f.invoice_id,
+        &investor,
+        &100_000,
+        &Symbol::new(&f.env, "EURC"),
+    );
+    assert!(
+        refreshed.is_ok(),
+        "refreshed investment failed: {:?}",
+        refreshed
+    );
 }
 
 #[test]

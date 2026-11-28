@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -130,10 +133,9 @@ impl PriceStabilisationContract {
             let obs = history.get(i).unwrap();
             if now.saturating_sub(obs.timestamp) <= ONE_HOUR_SECONDS
                 && obs.price > current_obs.price
+                && obs.price > baseline_price
             {
-                if obs.price > baseline_price {
-                    baseline_price = obs.price;
-                }
+                baseline_price = obs.price;
             }
         }
 
@@ -142,7 +144,7 @@ impl PriceStabilisationContract {
         }
 
         let price_drop = baseline_price - current_obs.price;
-        let drop_bps = ((price_drop as i128 * BPS_DENOMINATOR) / baseline_price) as u32;
+        let drop_bps = ((price_drop * BPS_DENOMINATOR) / baseline_price) as u32;
 
         if drop_bps <= DROP_THRESHOLD_BPS {
             return Err(Error::ThresholdNotMet);

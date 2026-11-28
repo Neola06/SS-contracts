@@ -6,6 +6,8 @@
 //! operator.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
 #![allow(deprecated)]
 
 use soroban_sdk::{

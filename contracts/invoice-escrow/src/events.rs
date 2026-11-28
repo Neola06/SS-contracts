@@ -36,6 +36,13 @@ pub fn escrow_status_changed(env: &Env, inv_id: Symbol, status: EscrowStatus, ti
     );
 }
 
+pub fn currency_max_age_set(env: &Env, currency: &Symbol, max_age_secs: u64) {
+    env.events().publish(
+        (Symbol::new(env, "currency_max_age_set"), currency.clone()),
+        max_age_secs,
+    );
+}
+
 pub fn escrow_created(
     env: &Env,
     inv_id: Symbol,
@@ -100,6 +107,24 @@ pub fn payment_settled(
     env.events().publish(
         (Symbol::new(env, "payment_settled"),),
         (inv_id, amount, platform_fee, investor_amount),
+    );
+}
+
+/// Publish the append-only receipt created by a successful payment.
+pub fn payment_receipt_created(
+    env: &Env,
+    invoice_id: &Symbol,
+    payer: &Address,
+    amount: i128,
+    ledger_timestamp: u64,
+    sequence: u32,
+) {
+    env.events().publish(
+        (
+            Symbol::new(env, "payment_receipt_created"),
+            invoice_id.clone(),
+        ),
+        (payer.clone(), amount, ledger_timestamp, sequence),
     );
 }
 
@@ -349,22 +374,6 @@ pub fn settlement_approved(env: &Env, invoice_id: &BytesN<32>, approver: &Addres
     );
 }
 
-/// Audit event: a pending settlement proposal was cancelled by its proposer or the administrator.
-pub fn settlement_cancelled(env: &Env, invoice_id: &BytesN<32>, actor: &Address, amount: i128) {
-    env.events().publish(
-        (Symbol::new(env, "settlement_cancelled"),),
-        (invoice_id, actor, amount),
-    );
-}
-
-/// Audit event: a pending settlement proposal passed its approval window and was cleared.
-pub fn settlement_expired(env: &Env, invoice_id: &BytesN<32>, proposer: &Address, amount: i128) {
-    env.events().publish(
-        (Symbol::new(env, "settlement_expired"),),
-        (invoice_id, proposer, amount),
-    );
-}
-
 /// Publish grace_period_updated event when the admin changes the grace window.
 pub fn grace_period_updated(env: &Env, old_seconds: u64, new_seconds: u64) {
     env.events().publish(
@@ -523,20 +532,5 @@ pub fn allocation_applied(
     env.events().publish(
         (Symbol::new(env, "allocation_applied"), invoice_id.clone()),
         (strategy as u32, total_allocated),
-    );
-}
-
-/// Publish a change to a currency's maximum FX quote age.
-pub fn currency_max_age_set(env: &Env, currency: &Symbol, max_age_secs: u64) {
-    env.events().publish(
-        (Symbol::new(env, "currency_max_age_set"), currency.clone()),
-        max_age_secs,
-    );
-}
-
-pub fn fee_snapshot_created(env: &Env, invoice_id: &BytesN<32>, effective_fee_bps: u32) {
-    env.events().publish(
-        (Symbol::new(env, "fee_snapshot_created"), invoice_id.clone()),
-        effective_fee_bps,
     );
 }

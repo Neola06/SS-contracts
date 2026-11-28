@@ -7,8 +7,8 @@
 //! expired allowances) behave as specified.
 
 use super::{InvoiceToken, InvoiceTokenClient};
-use soroban_sdk::testutils::{Address as _, Events, Ledger};
-use soroban_sdk::{Address, Env, IntoVal, String as SorobanString, Symbol, Vec};
+use soroban_sdk::testutils::{Address as _, Ledger};
+use soroban_sdk::{Address, Env, String as SorobanString, Symbol, TryFromVal};
 
 // ── Setup helpers ─────────────────────────────────────────────────────────────
 
@@ -235,15 +235,11 @@ fn transfer_from_with_expired_allowance_is_rejected() {
     let recipient = Address::generate(&env);
 
     // Approve with expiration at current ledger
-    env.ledger().with_mut(|li| {
-        li.sequence = 100;
-    });
+    env.ledger().set_sequence_number(100);
     client.approve(&admin, &spender, &500, &100);
 
     // Advance ledger past expiration
-    env.ledger().with_mut(|li| {
-        li.sequence = 101;
-    });
+    env.ledger().set_sequence_number(101);
 
     let result = client.try_transfer_from(&spender, &admin, &recipient, &100);
     assert!(
@@ -340,7 +336,7 @@ fn transfer_rejected_when_paused() {
 
     env.mock_all_auths();
     client.mint(&admin, &1000, &minter);
-    client.pause(&admin);
+    client.set_paused(&true);
 
     let recipient = Address::generate(&env);
     let result = client.try_transfer(&admin, &recipient, &100);

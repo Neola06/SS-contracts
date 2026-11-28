@@ -1,7 +1,13 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod events;
 mod types;
+
+#[cfg(test)]
+mod test;
 
 use types::StorageKey;
 pub use types::{Error, HolderShare, SettlementInvoice};
@@ -101,6 +107,7 @@ impl InvoiceSettlement {
         invoice_id: BytesN<32>,
         issuer: Address,
         token: Address,
+        outstanding_balance: i128,
         holders: Vec<HolderShare>,
     ) -> Result<(), Error> {
         admin(&env)?;
@@ -115,6 +122,9 @@ impl InvoiceSettlement {
         if holders.is_empty() {
             return Err(Error::InvalidHolders);
         }
+        if outstanding_balance <= 0 {
+            return Err(Error::InvalidAmount);
+        }
         let mut total: i128 = 0;
         for holder in holders.iter() {
             if holder.fractions <= 0 {
@@ -128,14 +138,52 @@ impl InvoiceSettlement {
             token,
             holders,
             total_fractions: total,
+            outstanding_balance,
             repaid_amount: 0,
             distributed: false,
+            payer: None,
+            settlement_evidence_hash: None,
         };
         save_invoice(&env, &data);
         Ok(())
     }
 
-    pub fn repay(env: Env, invoice_id: BytesN<32>, amount: i128) -> Result<(), Error> {
+    /// Record the verified off-chain evidence reference before settlement.
+    /// Both the invoice issuer and the payer must authorize the evidence.
+    pub fn record_settlement_evidence(
+        env: Env,
+        invoice_id: BytesN<32>,
+        payer: Address,
+        evidence_hash: BytesN<32>,
+    ) -> Result<(), Error> {
+        let mut data = invoice(&env, &invoice_id)?;
+        data.issuer.require_auth();
+        payer.require_auth();
+        if evidence_hash == BytesN::from_array(&env, &[0; 32]) {
+            return Err(Error::InvalidEvidence);
+        }
+        if data.settlement_evidence_hash.is_some() {
+            return Err(Error::EvidenceAlreadySet);
+        }
+        let evidence_key = StorageKey::EvidenceUsed(evidence_hash.clone());
+        if env.storage().persistent().has(&evidence_key) {
+            return Err(Error::EvidenceAlreadyUsed);
+        }
+        env.storage().persistent().set(&evidence_key, &invoice_id);
+        data.payer = Some(payer.clone());
+        data.settlement_evidence_hash = Some(evidence_hash.clone());
+        save_invoice(&env, &data);
+        events::settlement_evidenced(&env, &invoice_id, &payer, &evidence_hash);
+        Ok(())
+    }
+
+    pub fn repay(
+        env: Env,
+        invoice_id: BytesN<32>,
+        amount: i128,
+        payer: Address,
+        evidence_hash: BytesN<32>,
+    ) -> Result<(), Error> {
         if amount <= 0 {
             return Err(Error::InvalidAmount);
         }
@@ -144,10 +192,21 @@ impl InvoiceSettlement {
             return Err(Error::AlreadyRepaid);
         }
         data.issuer.require_auth();
+        payer.require_auth();
+        if data.payer.as_ref() != Some(&payer)
+            || data.settlement_evidence_hash.as_ref() != Some(&evidence_hash)
+        {
+            return Err(Error::EvidenceMismatch);
+        }
+        if amount != data.outstanding_balance {
+            return Err(Error::InvalidAmount);
+        }
         let token_client = token::Client::new(&env, &data.token);
-        token_client.transfer(&data.issuer, &env.current_contract_address(), &amount);
+        token_client.transfer(&payer, env.current_contract_address(), &amount);
         data.repaid_amount = amount;
+        data.outstanding_balance = 0;
         save_invoice(&env, &data);
+        events::settle_with_evidence(&env, &invoice_id, &payer, &evidence_hash, amount);
         events::repayment_received(&env, &invoice_id, &data.issuer, amount);
         Ok(())
     }

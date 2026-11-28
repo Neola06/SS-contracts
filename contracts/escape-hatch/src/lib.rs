@@ -8,6 +8,8 @@
 //! disabled while the protocol is paused, which includes escape mode.
 
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
 #![allow(deprecated)]
 
 use soroban_sdk::{

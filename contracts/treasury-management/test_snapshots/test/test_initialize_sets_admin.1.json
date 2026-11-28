@@ -50,7 +50,19 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "TotalBalance"
+                            "symbol": "TotalAllocated"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "i128": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "TotalReceived"
                           }
                         ]
                       },

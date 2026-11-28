@@ -1,4 +1,7 @@
 #![no_std]
+#![allow(clippy::duplicated_attributes)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 
 mod errors;
 mod events;
@@ -25,7 +28,7 @@ impl CategorisationRegistry {
     ) -> Result<(), Error> {
         issuer.require_auth();
 
-        if sub_category.len() == 0 || sub_category.len() > 64 {
+        if sub_category.is_empty() || sub_category.len() > 64 {
             return Err(Error::InvalidSubCategory);
         }
 

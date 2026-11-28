@@ -86,6 +86,8 @@ The `payment-distributor` contract now implements the settlement/refund fan-out 
 - `set_payment_distributor(payment_distributor)`
 - `set_paused(paused)`
 - `get_escrow(invoice_id) -> EscrowData`
+- `get_payment_receipts(invoice_id, cursor, limit) -> PaymentReceiptPage`
+- `get_payment_receipt_count(invoice_id) -> u32`
 - `get_config() -> Config`
 - `get_escrow_status(invoice_id) -> EscrowStatus`
 - `paused() -> bool`
@@ -127,6 +129,10 @@ Records a full or partial payment for a funded invoice.
 - Partial payments distribute the platform fee to the admin, the remainder to the investor, and release a proportional amount of the investor's initial funding to the seller.
 - The invoice status transitions to `Settled` only when the total paid matches the invoice amount.
 - If an installment schedule is configured, every milestone whose cumulative target is reached by the new `paid_amt` is marked settled (emitting `installment_settled`). When the escrow reaches terminal `Settled`, any remaining milestones are settled as well (covers early-settlement discounts and emergency releases).
+- Each successful payment appends a receipt with payer, amount, ledger timestamp, and a 1-based sequence. Receipt history is append-only and capped at 256 entries per invoice; once full, further payments are rejected.
+
+### `get_payment_receipts(invoice_id, cursor, limit) -> PaymentReceiptPage`
+Returns receipts with sequence numbers strictly greater than `cursor` (`0` starts at the first receipt), with a maximum page size of 50. The page includes `next_cursor` (the last returned sequence) and `total_count`. A cursor greater than the current count returns `InvalidCursor`; the independent `get_payment_receipt_count` view returns the retained receipt count.
 
 ### `set_installment_schedule(invoice_id: Symbol, seller: Address, schedule: Vec<InstallmentInput>)`
 Configures (or replaces) the partial installment settlement milestone schedule for an invoice (#450).
@@ -163,6 +169,32 @@ Returns the first unsettled milestone, or `None` when no schedule exists or all 
 - `installment_settled`
 - `settlement_proposed`
 - `settlement_approved`
+- `payment_receipt_created`
+
+## Invoice Metadata Registry
+
+- `register_invoice(admin, invoice_id, metadata)` registers revision 1 and assigns the invoice issuer as the initial metadata editor.
+- `set_metadata_editor(issuer, invoice_id, editor)` lets only the bound issuer assign an editor.
+- `update_metadata(editor, invoice_id, metadata)` requires the assigned editor and is allowed only before funding. The invoice issuer binding cannot be changed through metadata edits. Funding administrators do not receive metadata-editing authority.
+- `get_current_revision(invoice_id)` returns the latest revision number; `get_revision_history(invoice_id)` returns the append-only revision records.
+- `metadata_updated(invoice_id, old_revision, new_revision)` is emitted on each successful edit.
+
+## Invoice Settlement
+
+- `register_invoice(invoice_id, issuer, token, outstanding_balance, holders)` records the amount due with issuer authorization. Settlement requires an exact payment of this balance; partial settlement is not supported.
+- `record_settlement_evidence(invoice_id, payer, evidence_hash)` requires authorization from both the issuer and payer. The nonzero 32-byte evidence hash is permanently reserved and cannot be reused for another invoice.
+- `repay(invoice_id, amount, payer, evidence_hash)` requires the existing issuer authorization plus payer authorization and checks both payer and hash against the recorded evidence before transferring the exact outstanding amount from the payer.
+- `get_invoice(invoice_id)` exposes `payer` and `settlement_evidence_hash` with the settlement state.
+- `settlement_evidenced` records evidence registration; `settle_with_evidence` records the resulting settlement.
+
+## Invoice Milestones
+
+- Each `Milestone` includes an `evidence_expiry_ledger`; creation and renewal reject expiry ledgers earlier than the current ledger.
+- `verify_milestone(invoice_id, index)` rejects expired evidence before transferring its tranche.
+- `renew_evidence(admin, invoice_id, index, evidence_hash, expiry_ledger)` atomically replaces a pending milestone's evidence hash and expiry. Verified milestones cannot be renewed.
+- `get_milestone_status(invoice_id)` includes evidence validity and remaining ledger life.
+- `report_expired_evidence(admin, invoice_id, index)` emits `evidence_expired` once per expiry period; renewal allows a later expiry report.
+- `evidence_renewed` and `evidence_expired` events are emitted with the invoice and milestone index.
 
 ## API Deprecation Policy
 
@@ -191,3 +223,15 @@ StellarSettle follows a structured deprecation lifecycle for public entrypoints:
 - Every removal requires a migration guide and a tracking issue.
 - Legacy calls remain functional through the removal target version.
 - Inventory distinguishes current and deprecated entrypoints via `get_deprecation_records`.
+
+## Investor Notifications Delivery & Retry API
+
+`contracts/investor-notifications` tracks off-chain delivery state with bounded retries and provider receipts:
+
+- `set_delivery_provider(provider, authorized)` (admin-only): Authorizes/revokes a delivery relayer address.
+- `configure_retry_policy(max_retries, retry_delay_ledgers, expiry_ledgers)` (admin-only): Configures retry ceiling, ledger backoff delay, and notification TTL (`expiry_ledgers > 0`).
+- `queue_notification(caller, wallet, notification_type, invoice_id, amount) -> u64`: Authorized caller queues a `Pending` notification with bounded retries and `expires_at_ledger`.
+- `confirm_delivery(provider, notification_id, external_ref, receipt_hash)`: Authorized delivery provider records a non-empty, unique `external_ref` and non-zero `receipt_hash`, transitioning the notification to `Delivered`.
+- `record_delivery_failure(provider, notification_id, reason) -> DeliveryState`: Increments `retry_count`, schedules `next_retry_ledger` when below `max_retries`, or marks retries exhausted once `retry_count >= max_retries`.
+- `expire_notification(notification_id)`: Transitions an undelivered notification past `expires_at_ledger` into the terminal `Expired` state.
+- `get_notification_status(notification_id)` / `get_next_retry(notification_id)` / `get_notification(notification_id)`: Exposes current delivery state (`Pending`, `Delivered`, `Failed`, `Expired`) and next retry ledger.

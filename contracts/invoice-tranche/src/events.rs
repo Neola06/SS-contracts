@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use soroban_sdk::{symbol_short, Address, BytesN, Env};
 
 pub fn tranche_investment_recorded(
@@ -18,9 +20,10 @@ pub fn tranche_settled(
     invoice_id: &BytesN<32>,
     senior_payout: i128,
     junior_payout: i128,
+    issuer_surplus: i128,
 ) {
     env.events().publish(
         (symbol_short!("tr_sett"), invoice_id.clone()),
-        (senior_payout, junior_payout),
+        (senior_payout, junior_payout, issuer_surplus),
     );
 }
